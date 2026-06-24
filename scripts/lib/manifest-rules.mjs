@@ -12,6 +12,7 @@ export function validatePluginName(name) {
 }
 
 export function validateSemver(version) {
+  // 有意不锚定 `$`,镜像 lume 运行时校验:接受预发布版本如 1.0.0-beta(见 manifest-rules.test.mjs)。勿改。
   if (!/^\d+\.\d+\.\d+/.test(version ?? "")) {
     throw new Error(`Invalid version: "${version}". Must be semver (e.g. "1.0.0").`);
   }

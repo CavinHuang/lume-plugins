@@ -9,6 +9,8 @@ on:
       - ".lume-plugin/marketplace.json"
       - "package.json"
       - ".github/workflows/validate.yml"
+      - ".github/workflows/publish-index.yml"
+  workflow_dispatch:
 
 jobs:
   validate:
