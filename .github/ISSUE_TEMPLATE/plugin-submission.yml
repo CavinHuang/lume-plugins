@@ -1,0 +1,29 @@
+name: 插件收录提案
+description: 提议官方市场收录一个插件(代码以 PR 形式提交,本 Issue 用于讨论)
+labels: ["submission"]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: 插件名
+      placeholder: my-plugin
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: 它做什么
+    validations:
+      required: true
+  - type: textarea
+    id: permissions
+    attributes:
+      label: 需要的权限及理由
+      description: 逐项列出 shell/network/write 等权限及最小化理由
+    validations:
+      required: true
+  - type: input
+    id: pr
+    attributes:
+      label: 关联 PR
+      placeholder: "#123"
