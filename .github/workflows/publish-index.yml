@@ -1,0 +1,34 @@
+name: publish-index
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "plugins/**"
+      - "skills/**"
+      - "scripts/**"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: 重新生成索引
+        run: npm run build:index
+      - name: 若有变更则提交
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet; then
+            git add .lume-plugin/marketplace.json
+            git commit -m "🔧 chore: 同步 marketplace.json 索引"
+            git push
+          else
+            echo "index already in sync"
+          fi
