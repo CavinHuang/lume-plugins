@@ -70,7 +70,7 @@ Expected: `v20.x.x` 或更高。
   "description": "Lume 官方精选插件与技能收录市场",
   "engines": { "node": ">=20" },
   "scripts": {
-    "test": "node --test scripts",
+    "test": "node --test",
     "build:index": "node scripts/build-index.mjs",
     "check:index": "node scripts/build-index.mjs --check"
   },
@@ -89,7 +89,7 @@ node_modules/
 - [ ] **Step 4: 验证 package.json 合法且脚本就位**
 
 Run: `node -e "const p=require('./package.json'); console.log(p.type, p.scripts.test, p.scripts['build:index'])"`
-Expected: `module node --test scripts node scripts/build-index.mjs`
+Expected: `module node --test node scripts/build-index.mjs`
 
 - [ ] **Step 5: 提交**
 

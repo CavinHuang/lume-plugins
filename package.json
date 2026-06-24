@@ -6,7 +6,7 @@
   "description": "Lume 官方精选插件与技能收录市场",
   "engines": { "node": ">=20" },
   "scripts": {
-    "test": "node --test scripts",
+    "test": "node --test",
     "build:index": "node scripts/build-index.mjs",
     "check:index": "node scripts/build-index.mjs --check"
   },
