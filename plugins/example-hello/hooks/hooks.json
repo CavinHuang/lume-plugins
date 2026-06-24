@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "echo 'example-hello plugin loaded'",
+        "timeout": 5
+      }
+    ]
+  }
+}

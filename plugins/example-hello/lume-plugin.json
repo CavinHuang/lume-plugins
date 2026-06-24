@@ -1,0 +1,19 @@
+{
+  "schema": "lume-plugin/v1",
+  "name": "example-hello",
+  "version": "1.0.0",
+  "description": "示例插件:演示 Lume 市场收录的标准结构、技能/hook/mcp 接线与权限说明写法",
+  "author": "CavinHuang",
+  "displayName": "Example Hello",
+  "category": "Developer",
+  "skills": ["./skills/"],
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./mcp.json",
+  "permissions": {
+    "filesystem": {
+      "read": ["./**"],
+      "write": ["./data/**"]
+    }
+  },
+  "lume": { "hooksOnly": false }
+}

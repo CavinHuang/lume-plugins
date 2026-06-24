@@ -1,0 +1,19 @@
+{
+  "name": "Lume Plugins",
+  "description": "Lume 官方精选插件与技能集合",
+  "owner": {
+    "name": "CavinHuang"
+  },
+  "plugins": [
+    {
+      "name": "example-hello",
+      "description": "示例插件:演示 Lume 市场收录的标准结构、技能/hook/mcp 接线与权限说明写法",
+      "version": "1.0.0",
+      "source": "./plugins/example-hello",
+      "author": {
+        "name": "CavinHuang"
+      }
+    }
+  ],
+  "skills": []
+}
