@@ -50,30 +50,16 @@
 **Files:**
 - Create: `package.json`
 - Create: `.gitignore`
-- Create: `scripts/lib/sanity.test.mjs`
-- Test: `scripts/lib/sanity.test.mjs`
 
 **Interfaces:**
-- Produces: `npm test` 入口(`node --test scripts`),后续所有测试放入 `scripts/` 即自动被发现。
+- Produces: `npm test` / `build:index` / `check:index` 脚本入口。本任务**不放测试文件**(第一批真测试在 Task 2);`npm test` 此时会因无测试文件而退出非零,属正常,本任务不运行它。
 
-- [ ] **Step 1: 写一个冒烟测试(证明 node:test 跑得起来)**
+- [ ] **Step 1: 确认 Node 版本满足 >=20**
 
-`scripts/lib/sanity.test.mjs`:
-```js
-import test from "node:test";
-import assert from "node:assert/strict";
+Run: `node --version`
+Expected: `v20.x.x` 或更高。
 
-test("node:test harness works", () => {
-  assert.equal(1 + 1, 2);
-});
-```
-
-- [ ] **Step 2: 运行,确认失败(尚未有 package.json 脚本,直接调 node)**
-
-Run: `node --test scripts`
-Expected: PASS(1 test)。若报 "No tests found",检查文件名含 `.test.`。
-
-- [ ] **Step 3: 写 `package.json`**
+- [ ] **Step 2: 写 `package.json`**
 
 ```json
 {
@@ -92,7 +78,7 @@ Expected: PASS(1 test)。若报 "No tests found",检查文件名含 `.test.`。
 }
 ```
 
-- [ ] **Step 4: 写 `.gitignore`**
+- [ ] **Step 3: 写 `.gitignore`**
 
 ```gitignore
 node_modules/
@@ -100,15 +86,15 @@ node_modules/
 *.log
 ```
 
-- [ ] **Step 5: 用 npm 脚本再跑一次测试**
+- [ ] **Step 4: 验证 package.json 合法且脚本就位**
 
-Run: `npm test`
-Expected: PASS(1 test),输出 `# pass 1`。
+Run: `node -e "const p=require('./package.json'); console.log(p.type, p.scripts.test, p.scripts['build:index'])"`
+Expected: `module node --test scripts node scripts/build-index.mjs`
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 5: 提交**
 
 ```bash
-git add package.json .gitignore scripts/lib/sanity.test.mjs
+git add package.json .gitignore
 git commit -m "🔧 chore: 初始化仓库工具链基线"
 ```
 
