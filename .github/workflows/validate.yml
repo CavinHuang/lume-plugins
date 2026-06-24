@@ -1,0 +1,24 @@
+name: validate
+
+on:
+  pull_request:
+    paths:
+      - "plugins/**"
+      - "skills/**"
+      - "scripts/**"
+      - ".lume-plugin/marketplace.json"
+      - "package.json"
+      - ".github/workflows/validate.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: 单元测试
+        run: npm test
+      - name: 索引一致性 + 权限审计 + 结构校验
+        run: npm run check:index
