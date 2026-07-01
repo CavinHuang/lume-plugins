@@ -1,5 +1,5 @@
 ---
-name: control-browser
+name: lume-chrome
 description: Control the user's Chrome browser through Lume's built-in node_repl MCP when existing browser state is required.
 ---
 

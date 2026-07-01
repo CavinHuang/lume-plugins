@@ -29,6 +29,7 @@ test("Chrome extension manifest uses Lume Browse identity", async () => {
 test("browser skill starts through Lume node_repl MCP", async () => {
   const skill = await readText(join("skills", "control-browser", "SKILL.md"));
 
+  assert.match(skill, /^name:\s*lume-chrome$/m);
   assert.match(skill, /mcp__node_repl__js/);
   assert.match(skill, /setupNodeReplBrowserRuntime/);
   assert.doesNotMatch(skill, /D:\\\\workspace/);
