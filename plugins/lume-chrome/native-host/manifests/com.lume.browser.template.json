@@ -1,0 +1,7 @@
+{
+  "name": "com.lume.browser",
+  "description": "Lume Chrome native messaging host",
+  "path": "${HOST_EXECUTABLE_PATH}",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://${EXTENSION_ID}/"]
+}

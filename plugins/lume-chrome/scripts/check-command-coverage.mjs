@@ -1,0 +1,10 @@
+import fs from "node:fs";
+const protocol=fs.readFileSync(new URL("../src/shared/protocol.ts",import.meta.url),"utf8");
+const dispatcher=fs.readFileSync(new URL("../src/extension/runtime/RuntimeDispatcher.ts",import.meta.url),"utf8");
+const block=protocol.match(/export type BrowserCommandType\s*=([\s\S]*?);/)?.[1]??"";
+const commands=[...block.matchAll(/"([^"]+)"/g)].map(m=>m[1]);
+const handled=new Set([...dispatcher.matchAll(/case"([^"]+)"/g)].map(m=>m[1]));
+for(const c of ["runtime_ping","runtime_list_browsers"])handled.add(c);
+const missing=commands.filter(c=>!handled.has(c));
+console.log(JSON.stringify({declared:commands.length,handled:handled.size,missing},null,2));
+if(missing.length)process.exitCode=1;

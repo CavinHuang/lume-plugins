@@ -1,0 +1,21 @@
+{
+  "name": "lume-chrome",
+  "private": true,
+  "version": "0.4.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/fix-esm-imports.mjs",
+    "zip:extension": "node scripts/zip-extension.mjs",
+    "install:native-host": "node scripts/install-native-host.mjs",
+    "check:extension": "node scripts/check-extension-installed.mjs",
+    "check:native-host": "node scripts/check-native-host-manifest.mjs",
+    "check:chrome": "node scripts/chrome-is-running.mjs",
+    "test": "npm run build && node --test tests",
+    "check:coverage": "node scripts/check-command-coverage.mjs",
+    "diagnose": "node scripts/diagnose.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "latest",
+    "typescript": "latest"
+  }
+}

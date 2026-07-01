@@ -1,0 +1,67 @@
+{
+  "manifest_version": 3,
+  "name": "Lume Browse",
+  "description": "Control Chrome through Lume's browser plugin.",
+  "version": "0.4.0",
+  "action": {
+    "default_title": "Lume Browser",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "dist/extension/background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "alarms",
+    "debugger",
+    "nativeMessaging",
+    "notifications",
+    "scripting",
+    "storage",
+    "tabGroups",
+    "tabs",
+    "downloads",
+    "downloads.ui",
+    "favicon",
+    "sessions",
+    "clipboardRead",
+    "clipboardWrite"
+  ],
+  "optional_permissions": [
+    "history",
+    "bookmarks",
+    "readingList",
+    "topSites"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*;"
+  },
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "resources": [
+        "assets/cursor.svg"
+      ]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "optional_host_permissions": [
+    "file:///*"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "schema": "lume-plugin/v1",
+  "name": "lume-chrome",
+  "version": "0.4.0",
+  "description": "Control Chrome through Lume's built-in node_repl MCP bridge.",
+  "author": "CavinHuang",
+  "displayName": "Lume Browse",
+  "category": "Browser",
+  "skills": ["./skills/"],
+  "permissions": {
+    "filesystem": {
+      "read": ["./**"]
+    },
+    "tools": {
+      "allow": ["mcp__node_repl__js"]
+    },
+    "network": {
+      "outbound": []
+    },
+    "shell": {
+      "allow": false
+    }
+  }
+}
