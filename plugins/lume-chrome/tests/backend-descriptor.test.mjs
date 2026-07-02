@@ -17,9 +17,14 @@ test("fake iab backend advertises a versioned descriptor and records calls", asy
 
   const params = { context: { browserSessionId: "session-1", browserTurnId: "turn-1", actor: "agent" } };
   const browsers = await backend.transport.send("runtime_list_browsers", params);
+  params.context.browserTurnId = "mutated";
 
   assert.equal(PROTOCOL_VERSION, 5);
-  assert.deepEqual(backend.calls, [{ method: "runtime_list_browsers", params }]);
+  assert.notEqual(backend.calls[0].params, params);
+  assert.deepEqual(backend.calls, [{
+    method: "runtime_list_browsers",
+    params: { context: { browserSessionId: "session-1", browserTurnId: "turn-1", actor: "agent" } },
+  }]);
   assert.notEqual(browsers[0], backend.descriptor);
   assert.deepEqual(browsers, [
     {

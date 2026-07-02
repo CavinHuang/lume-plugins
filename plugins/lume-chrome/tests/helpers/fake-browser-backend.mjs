@@ -38,7 +38,7 @@ export function createFakeBackend(options = {}) {
     },
     transport: {
       async send(method, params) {
-        calls.push({ method, params });
+        calls.push({ method, params: clone(params) });
         if (!responses.has(method)) {
           throw new Error(`No fake response for ${method}`);
         }
