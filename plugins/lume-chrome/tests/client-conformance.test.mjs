@@ -23,10 +23,7 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
       "PlaywrightDownload.path": false,
       "PlaywrightFileChooser.setFiles": false,
       "PlaywrightFrameLocator.frameLocator": false,
-      "PlaywrightLocator.and": false,
       "PlaywrightLocator.downloadMedia": false,
-      "PlaywrightLocator.or": false,
-      "PlaywrightLocator.type": false,
     },
     browserCapabilities: [{ id: "visibility", description: "Visibility" }],
     tabCapabilities: [{ id: "pageAssets", description: "Page assets" }],
@@ -47,6 +44,7 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
   fake.respond("tab_clipboard_write_text", undefined);
   fake.respond("cua_move", undefined);
   fake.respond("cua_click", undefined);
+  fake.respond("playwright_locator_type", undefined);
 
   const globals = {};
   const runtime = await setupBrowserRuntime({
@@ -136,10 +134,22 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
   assert.equal(typeof locator.click, "function");
   assert.equal(typeof locator.fill, "function");
   assert.equal(typeof locator.allTextContents, "function");
-  assert.equal(locator.and, undefined);
+  assert.equal(typeof locator.and, "function");
+  assert.equal(typeof locator.or, "function");
+  assert.equal(typeof locator.type, "function");
+  const andLocator = locator.and(tab.playwright.getByText("Save"));
+  const orLocator = locator.or(tab.playwright.getByText("Cancel"));
+  assert.equal(typeof andLocator.click, "function");
+  assert.equal(typeof orLocator.click, "function");
+  await locator.type(" appended", { timeoutMs: 123 });
+  const typeCall = fake.calls.find((call) => call.method === "playwright_locator_type");
+  assert.deepEqual(typeCall.params.locator, {
+    version: 1,
+    steps: [{ kind: "locator", selector: "button" }],
+  });
+  assert.equal(typeCall.params.text, " appended");
+  assert.equal(typeCall.params.timeoutMs, 123);
   assert.equal(locator.downloadMedia, undefined);
-  assert.equal(locator.or, undefined);
-  assert.equal(locator.type, undefined);
   assert.match(await browser.documentation(), /DOC:browser-safety/);
 
   fake.descriptor.generation = 8;

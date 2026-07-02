@@ -504,6 +504,7 @@ export class PlaywrightLocator {
   dblclick(options:{timeoutMs?:number;strict?:boolean}={}): Promise<void> { return this.send("playwright_locator_dblclick", options); }
   fill(value:string, options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_fill", {...options, text:value}); }
   press(key:string, options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_press", {...options, key}); }
+  type(value:string, options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_type", {...options, text:value}); }
   selectOption(value:string|string[], options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_select_option", {...options, value}); }
   setChecked(checked:boolean, options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_set_checked", {...options, checked}); }
   check(options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_check", options); }

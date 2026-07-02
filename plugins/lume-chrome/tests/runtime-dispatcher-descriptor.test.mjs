@@ -71,10 +71,7 @@ test("runtime descriptor advertises only implemented extension capabilities", as
       "PlaywrightDownload.path": false,
       "PlaywrightFileChooser.setFiles": false,
       "PlaywrightFrameLocator.frameLocator": false,
-      "PlaywrightLocator.and": false,
       "PlaywrightLocator.downloadMedia": false,
-      "PlaywrightLocator.or": false,
-      "PlaywrightLocator.type": false,
     },
   });
 });
@@ -190,4 +187,39 @@ test("coordinate CUA mouse actions show the overlay cursor before CDP input", as
       { tabId: 99, files: ["dist/extension/content/overlay.js"] },
     ],
   );
+});
+
+test("playwright locator and/or/type resolve through the page facade", async () => {
+  const calls = [];
+  const dispatcher = createDispatcher();
+  dispatcher.leases.get = async () => ({ chromeTabId: 77 });
+  dispatcher.pw.operation = async (tabId, locator, operation, payload) => {
+    calls.push({ tabId, locator, operation, payload });
+    return operation === "allTextContents" ? ["value"] : undefined;
+  };
+
+  const locator = {
+    version: 1,
+    steps: [
+      { kind: "locator", selector: "button" },
+      { kind: "and", locator: { version: 1, steps: [{ kind: "text", text: "Save" }] } },
+      { kind: "or", locator: { version: 1, steps: [{ kind: "text", text: "Cancel" }] } },
+    ],
+  };
+
+  await dispatch(dispatcher, "playwright_locator_type", {
+    tabId: "lume-tab:1",
+    locator,
+    text: " appended",
+    timeoutMs: 250,
+  });
+
+  assert.deepEqual(calls, [
+    {
+      tabId: 77,
+      locator,
+      operation: "type",
+      payload: { tabId: "lume-tab:1", locator, text: " appended", timeoutMs: 250 },
+    },
+  ]);
 });

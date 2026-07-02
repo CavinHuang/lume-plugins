@@ -29,7 +29,7 @@ export type BrowserCommandType =
   | "playwright_dom_snapshot" | "playwright_evaluate" | "playwright_element_info" | "playwright_element_screenshot"
   | "playwright_download_path" | "playwright_wait_for_download" | "playwright_wait_for_file_chooser" | "playwright_file_chooser_set_files"
   | "playwright_wait_for_load_state" | "playwright_wait_for_timeout" | "playwright_wait_for_url" | "playwright_wait_for_selector"
-  | "playwright_locator_click" | "playwright_locator_dblclick" | "playwright_locator_fill" | "playwright_locator_press"
+  | "playwright_locator_click" | "playwright_locator_dblclick" | "playwright_locator_fill" | "playwright_locator_press" | "playwright_locator_type"
   | "playwright_locator_select_option" | "playwright_locator_set_checked" | "playwright_locator_check" | "playwright_locator_uncheck"
   | "playwright_locator_get_attribute" | "playwright_locator_inner_text" | "playwright_locator_text_content" | "playwright_locator_input_value"
   | "playwright_locator_is_visible" | "playwright_locator_is_enabled" | "playwright_locator_is_checked" | "playwright_locator_count"

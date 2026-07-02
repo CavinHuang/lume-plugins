@@ -35,7 +35,7 @@ available:
 | `tab.clipboard` | `readText()`, `writeText()` |
 | `tab.cua` | `move()`, `click()`, `double_click()`, `drag()`, `scroll()`, `type()`, `keypress()` |
 | `tab.playwright` | `domSnapshot()`, `evaluate()`, `expectNavigation()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()`, `waitForURL()`, `waitForLoadState()`, `waitForTimeout()` |
-| `tab.playwright.locator(...)` | `click()`, `dblclick()`, `fill()`, `press()`, `selectOption()`, `setChecked()`, `check()`, `uncheck()`, `getAttribute()`, `innerText()`, `textContent()`, `inputValue()`, `isVisible()`, `isEnabled()`, `isChecked()`, `count()`, `all()`, `allTextContents()`, `filter()`, `first()`, `last()`, `locator()`, `nth()`, `waitFor()` |
+| `tab.playwright.locator(...)` | `click()`, `dblclick()`, `fill()`, `press()`, `type()`, `selectOption()`, `setChecked()`, `check()`, `uncheck()`, `getAttribute()`, `innerText()`, `textContent()`, `inputValue()`, `isVisible()`, `isEnabled()`, `isChecked()`, `count()`, `all()`, `allTextContents()`, `filter()`, `and()`, `or()`, `first()`, `last()`, `locator()`, `nth()`, `waitFor()` |
 
 ### Controller-backed adapters
 
