@@ -129,6 +129,12 @@ function normalizePingDescriptor(value, requestedId) {
 function requestedType(value) {
     return value === "iab" || value === "cdp" ? value : "extension";
 }
+function historyTime(value) {
+    if (value === undefined)
+        return undefined;
+    const time = value instanceof Date ? value.getTime() : Date.parse(value);
+    return Number.isFinite(time) ? time : undefined;
+}
 function guardedTransport(transport, descriptor, currentGeneration) {
     const assertCurrent = () => {
         if (currentGeneration() !== descriptor.generation) {
@@ -204,8 +210,30 @@ export class BrowserUser {
         const result = await this.t.send("browser_user_claim_tab", { context: this.ctx, tabId });
         return new Tab(this.t, this.ctx, result.tabId, this.browser);
     }
-    history(options = {}) {
-        return this.t.send("browser_user_history", { context: this.ctx, options });
+    async history(options = {}) {
+        const query = options.queries?.filter(Boolean).join(" ") ?? "";
+        const commandOptions = {
+            text: query,
+        };
+        if (typeof options.limit === "number")
+            commandOptions.maxResults = options.limit;
+        const startTime = historyTime(options.from);
+        const endTime = historyTime(options.to);
+        if (startTime !== undefined)
+            commandOptions.startTime = startTime;
+        if (endTime !== undefined)
+            commandOptions.endTime = endTime;
+        const entries = await this.t.send("browser_user_history", {
+            context: this.ctx,
+            options: commandOptions,
+        });
+        return entries.flatMap((entry) => entry.url
+            ? [{
+                    url: entry.url,
+                    ...(entry.title ? { title: entry.title } : {}),
+                    dateVisited: new Date(entry.lastVisitTime ?? 0).toISOString(),
+                }]
+            : []);
     }
     topSites() { return this.t.send("top_sites_get", { context: this.ctx }); }
     recentSessions() { return this.t.send("sessions_get_recently_closed", { context: this.ctx }); }
@@ -250,6 +278,7 @@ export class Tab {
     playwright;
     capabilities;
     clipboard;
+    content;
     dev;
     constructor(t, ctx, id, browser) {
         this.t = t;
@@ -258,6 +287,7 @@ export class Tab {
         this.cua = new CUAAPI(t, ctx, id);
         this.dom_cua = new DomCUAAPI(t, ctx, id);
         this.playwright = new PlaywrightAPI(t, ctx, id);
+        this.content = new ContentAPI(t, ctx, id);
         this.capabilities = new CapabilityCollection({
             advertised: browser.capabilities.tab,
             browserId: browser.id,
@@ -284,6 +314,32 @@ export class Tab {
     }
     exportContent(options) {
         return this.t.send(options.format === "gsuite" ? "tab_content_export_gsuite" : "tab_content_export", { context: this.ctx, tabId: this.id, options });
+    }
+    markDeliverable(reason) { return this.finalizeAs("deliverable", reason); }
+    markHandoff(reason) { return this.finalizeAs("handoff", reason); }
+    finalizeAs(status, reason) {
+        const keep = { tabId: this.id, status };
+        if (reason)
+            keep.reason = reason;
+        return this.t.send("finalize_tabs", { context: this.ctx, keep: [keep] });
+    }
+}
+class ContentAPI {
+    t;
+    ctx;
+    tabId;
+    constructor(t, ctx, tabId) {
+        this.t = t;
+        this.ctx = ctx;
+        this.tabId = tabId;
+    }
+    async export() {
+        const result = await this.t.send("tab_content_export", {
+            context: this.ctx,
+            tabId: this.tabId,
+            options: { format: "markdown" },
+        });
+        return result.path ?? result.assetId;
     }
 }
 class TabDevAPI {
@@ -415,6 +471,7 @@ export class PlaywrightLocator {
     dblclick(options = {}) { return this.send("playwright_locator_dblclick", options); }
     fill(value, options = {}) { return this.send("playwright_locator_fill", { ...options, text: value }); }
     press(key, options = {}) { return this.send("playwright_locator_press", { ...options, key }); }
+    type(value, options = {}) { return this.send("playwright_locator_type", { ...options, text: value }); }
     selectOption(value, options = {}) { return this.send("playwright_locator_select_option", { ...options, value }); }
     setChecked(checked, options = {}) { return this.send("playwright_locator_set_checked", { ...options, checked }); }
     check(options = {}) { return this.send("playwright_locator_check", options); }

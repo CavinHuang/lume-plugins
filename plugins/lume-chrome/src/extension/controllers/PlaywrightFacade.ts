@@ -21,34 +21,31 @@ async function locatorOperation<T>(tabId:number, ast:LocatorAst, operation:strin
     const role=(el:Element)=>el.getAttribute("role")||({A:"link",BUTTON:"button",INPUT:(el as HTMLInputElement).type==="checkbox"?"checkbox":(el as HTMLInputElement).type==="radio"?"radio":"textbox",TEXTAREA:"textbox",SELECT:"combobox",IMG:"img",OPTION:"option"} as Record<string,string>)[el.tagName]||"generic";
     const allDesc=(roots:Element[],selector:string)=>roots.flatMap(root=>Array.from(root.querySelectorAll(selector)));
     const unique=(elements:Element[])=>Array.from(new Set(elements));
-    let roots:Element[]=[document.documentElement];
-    let current:Element[]=[];
-    for(const step of inputAst.steps as any[]){
-      if(step.kind==="frame"){
-        const frames=allDesc(roots,step.selector).filter(e=>e instanceof HTMLIFrameElement) as HTMLIFrameElement[];
-        roots=frames.flatMap(f=>{try{return f.contentDocument?.documentElement?[f.contentDocument.documentElement]:[];}catch{return[];}});current=[];continue;
+    const resolveAst=async(input:any):Promise<Element[]>=>{
+      let roots:Element[]=[document.documentElement];
+      let current:Element[]=[];
+      for(const step of input.steps as any[]){
+        if(step.kind==="frame"){
+          const frames=allDesc(roots,step.selector).filter(e=>e instanceof HTMLIFrameElement) as HTMLIFrameElement[];
+          roots=frames.flatMap(f=>{try{return f.contentDocument?.documentElement?[f.contentDocument.documentElement]:[];}catch{return[];}});current=[];continue;
+        }
+        const scope=current.length?current:roots;
+        if(step.kind==="css"||step.kind==="locator") current=allDesc(scope,step.selector);
+        else if(step.kind==="role") current=allDesc(scope,"*").filter(el=>role(el)===step.role&&(!step.name||textMatches(accessibleName(el),step.name,step.exact)));
+        else if(step.kind==="text") current=allDesc(scope,"*").filter(el=>textMatches(el.textContent||"",step.text,step.exact)&&!Array.from(el.children).some(c=>textMatches(c.textContent||"",step.text,step.exact)));
+        else if(step.kind==="label") current=allDesc(scope,"input,textarea,select,button").filter(el=>textMatches(accessibleName(el),step.text,step.exact));
+        else if(step.kind==="placeholder") current=allDesc(scope,"[placeholder]").filter(el=>textMatches(el.getAttribute("placeholder")||"",step.text,step.exact));
+        else if(step.kind==="testId") current=allDesc(scope,`[data-testid="${CSS.escape(step.testId)}"]`);
+        else if(step.kind==="filter") current=current.filter(el=>(!step.hasText||textMatches(el.textContent||"",step.hasText))&&(!step.hasNotText||!textMatches(el.textContent||"",step.hasNotText)));
+        else if(step.kind==="first") current=current.slice(0,1);
+        else if(step.kind==="last") current=current.slice(-1);
+        else if(step.kind==="nth") current=current.slice(step.index,step.index+1);
+        else if(step.kind==="and"){const nested=await resolveAst(step.locator);current=current.filter(el=>nested.includes(el));}
+        else if(step.kind==="or"){const nested=await resolveAst(step.locator);current=unique([...current,...nested]);}
       }
-      const scope=current.length?current:roots;
-      if(step.kind==="css"||step.kind==="locator") current=allDesc(scope,step.selector);
-      else if(step.kind==="role") current=allDesc(scope,"*").filter(el=>role(el)===step.role&&(!step.name||textMatches(accessibleName(el),step.name,step.exact)));
-      else if(step.kind==="text") current=allDesc(scope,"*").filter(el=>textMatches(el.textContent||"",step.text,step.exact)&&!Array.from(el.children).some(c=>textMatches(c.textContent||"",step.text,step.exact)));
-      else if(step.kind==="label") current=allDesc(scope,"input,textarea,select,button").filter(el=>textMatches(accessibleName(el),step.text,step.exact));
-      else if(step.kind==="placeholder") current=allDesc(scope,"[placeholder]").filter(el=>textMatches(el.getAttribute("placeholder")||"",step.text,step.exact));
-      else if(step.kind==="testId") current=allDesc(scope,`[data-testid="${CSS.escape(step.testId)}"]`);
-      else if(step.kind==="filter") current=current.filter(el=>(!step.hasText||textMatches(el.textContent||"",step.hasText))&&(!step.hasNotText||!textMatches(el.textContent||"",step.hasNotText)));
-      else if(step.kind==="first") current=current.slice(0,1);
-      else if(step.kind==="last") current=current.slice(-1);
-      else if(step.kind==="nth") current=current.slice(step.index,step.index+1);
-      else if(step.kind==="and"||step.kind==="or"){
-        const nested=await (async()=>{
-          const holder=document.createElement("div");
-          // Nested AST is resolved from document through a small recursive call by cloning this resolver input.
-          return await Promise.resolve([] as Element[]);
-        })();
-        if(step.kind==="and") current=current.filter(el=>nested.includes(el)); else current=unique([...current,...nested]);
-      }
-    }
-    current=unique(current);
+      return unique(current);
+    };
+    const current=await resolveAst(inputAst);
     const timeout=Math.max(0,Math.min(Number(p.timeoutMs??5000),30000));
     const waitUntil=async(predicate:()=>boolean)=>{const start=Date.now();while(!predicate()){if(Date.now()-start>timeout)throw new Error(`Locator timed out after ${timeout}ms`);await new Promise(r=>setTimeout(r,100));}};
     if(op==="count")return current.length as any;
@@ -63,7 +60,7 @@ async function locatorOperation<T>(tabId:number, ast:LocatorAst, operation:strin
     if(current.length===0)throw new Error("Locator resolved to no elements");
     if(strict&&current.length!==1)throw new Error(`Strict locator violation: resolved to ${current.length} elements`);
     const el=current[0] as AnyEl;
-    if(["click","dblclick","fill","press","selectOption","setChecked","check","uncheck"].includes(op)){
+    if(["click","dblclick","fill","press","type","selectOption","setChecked","check","uncheck"].includes(op)){
       if(!visible(el))throw new Error("Element is not visible");if(!enabled(el))throw new Error("Element is disabled");
       (el as HTMLElement).scrollIntoView({block:"center",inline:"center"});await new Promise(r=>requestAnimationFrame(()=>r(undefined)));
     }
@@ -71,6 +68,7 @@ async function locatorOperation<T>(tabId:number, ast:LocatorAst, operation:strin
     if(op==="dblclick"){el.dispatchEvent(new MouseEvent("dblclick",{bubbles:true,cancelable:true,view:window}));return undefined as any;}
     if(op==="fill"){el.focus?.();if(!("value" in el))throw new Error("Element is not fillable");el.value=String(p.text??"");el.dispatchEvent(new InputEvent("input",{bubbles:true,data:String(p.text??""),inputType:"insertText"}));el.dispatchEvent(new Event("change",{bubbles:true}));return undefined as any;}
     if(op==="press"){el.focus?.();el.dispatchEvent(new KeyboardEvent("keydown",{bubbles:true,key:p.key}));el.dispatchEvent(new KeyboardEvent("keyup",{bubbles:true,key:p.key}));return undefined as any;}
+    if(op==="type"){const text=String(p.text??"");el.focus?.();if("value" in el){const input=el as unknown as HTMLInputElement|HTMLTextAreaElement;const start=input.selectionStart??input.value.length;const end=input.selectionEnd??start;input.value=`${input.value.slice(0,start)}${text}${input.value.slice(end)}`;const caret=start+text.length;input.setSelectionRange?.(caret,caret);input.dispatchEvent(new InputEvent("input",{bubbles:true,data:text,inputType:"insertText"}));input.dispatchEvent(new Event("change",{bubbles:true}));return undefined as any;}if((el as HTMLElement).isContentEditable){document.execCommand?.("insertText",false,text);el.dispatchEvent(new InputEvent("input",{bubbles:true,data:text,inputType:"insertText"}));el.dispatchEvent(new Event("change",{bubbles:true}));return undefined as any;}throw new Error("Element is not typeable");}
     if(op==="selectOption"){if(!(el instanceof HTMLSelectElement))throw new Error("Element is not a select");const values=Array.isArray(p.value)?p.value:[p.value];for(const option of Array.from(el.options))option.selected=values.includes(option.value);el.dispatchEvent(new Event("change",{bubbles:true}));return undefined as any;}
     if(op==="setChecked"||op==="check"||op==="uncheck"){if(!("checked" in el))throw new Error("Element is not checkable");el.checked=op==="check"?true:op==="uncheck"?false:Boolean(p.checked);el.dispatchEvent(new Event("input",{bubbles:true}));el.dispatchEvent(new Event("change",{bubbles:true}));return undefined as any;}
     if(op==="getAttribute")return el.getAttribute(p.name) as any;

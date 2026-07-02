@@ -28,6 +28,25 @@ const DEFAULT_CONTEXT: BrowserContext = {
 };
 const REGISTRY_REFRESHERS = new WeakMap<BrowserRegistry, () => Promise<void>>();
 
+type BrowserHistoryOptions = {
+  from?: string | Date;
+  limit?: number;
+  queries?: string[];
+  to?: string | Date;
+};
+
+type BrowserHistoryEntry = {
+  dateVisited: string;
+  title?: string;
+  url: string;
+};
+
+type RawBrowserHistoryEntry = {
+  lastVisitTime?: number;
+  title?: string;
+  url?: string;
+};
+
 export interface BrowserTransport {
   send<T = unknown>(method: BrowserCommandType, params: unknown): Promise<T>;
   notify?(method: string, params: unknown): void;
@@ -177,6 +196,12 @@ function requestedType(value: string): BrowserClientType {
   return value === "iab" || value === "cdp" ? value : "extension";
 }
 
+function historyTime(value: string | Date | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const time = value instanceof Date ? value.getTime() : Date.parse(value);
+  return Number.isFinite(time) ? time : undefined;
+}
+
 function guardedTransport(
   transport: BrowserTransport,
   descriptor: BrowserBackendDescriptor,
@@ -252,8 +277,28 @@ export class BrowserUser {
     const result = await this.t.send<{ tabId: string }>("browser_user_claim_tab", { context: this.ctx, tabId });
     return new Tab(this.t, this.ctx, result.tabId, this.browser);
   }
-  history(options: { text?: string; maxResults?: number; startTime?: number; endTime?: number } = {}): Promise<Array<{url:string; title?:string; lastVisitTime?:number}>> {
-    return this.t.send("browser_user_history", { context: this.ctx, options });
+  async history(options: BrowserHistoryOptions = {}): Promise<BrowserHistoryEntry[]> {
+    const query = options.queries?.filter(Boolean).join(" ") ?? "";
+    const commandOptions: { text: string; maxResults?: number; startTime?: number; endTime?: number } = {
+      text: query,
+    };
+    if (typeof options.limit === "number") commandOptions.maxResults = options.limit;
+    const startTime = historyTime(options.from);
+    const endTime = historyTime(options.to);
+    if (startTime !== undefined) commandOptions.startTime = startTime;
+    if (endTime !== undefined) commandOptions.endTime = endTime;
+
+    const entries = await this.t.send<RawBrowserHistoryEntry[]>("browser_user_history", {
+      context: this.ctx,
+      options: commandOptions,
+    });
+    return entries.flatMap((entry) => entry.url
+      ? [{
+          url: entry.url,
+          ...(entry.title ? { title: entry.title } : {}),
+          dateVisited: new Date(entry.lastVisitTime ?? 0).toISOString(),
+        }]
+      : []);
   }
   topSites(): Promise<Array<{url:string; title?:string}>> { return this.t.send("top_sites_get", { context: this.ctx }); }
   recentSessions(): Promise<unknown[]> { return this.t.send("sessions_get_recently_closed", { context: this.ctx }); }
@@ -294,6 +339,7 @@ export class Tab {
   readonly playwright: PlaywrightAPI;
   readonly capabilities: CapabilityCollection;
   readonly clipboard: TabClipboardAPI;
+  readonly content: ContentAPI;
   readonly dev: TabDevAPI;
   constructor(
     private readonly t: BrowserTransport,
@@ -304,6 +350,7 @@ export class Tab {
     this.cua = new CUAAPI(t, ctx, id);
     this.dom_cua = new DomCUAAPI(t, ctx, id);
     this.playwright = new PlaywrightAPI(t, ctx, id);
+    this.content = new ContentAPI(t, ctx, id);
     this.capabilities = new CapabilityCollection({
       advertised: browser.capabilities.tab,
       browserId: browser.id,
@@ -330,6 +377,25 @@ export class Tab {
   }
   exportContent(options: { format: "text" | "markdown" | "html" | "gsuite" }): Promise<{ assetId: string; path?: string }> {
     return this.t.send(options.format === "gsuite" ? "tab_content_export_gsuite" : "tab_content_export", { context: this.ctx, tabId: this.id, options });
+  }
+  markDeliverable(reason?: string): Promise<void> { return this.finalizeAs("deliverable", reason); }
+  markHandoff(reason?: string): Promise<void> { return this.finalizeAs("handoff", reason); }
+  private finalizeAs(status: FinalizeTabKeep["status"], reason?: string): Promise<void> {
+    const keep: FinalizeTabKeep = { tabId: this.id, status };
+    if (reason) keep.reason = reason;
+    return this.t.send("finalize_tabs", { context: this.ctx, keep: [keep] });
+  }
+}
+
+class ContentAPI {
+  constructor(private readonly t: BrowserTransport, private readonly ctx: BrowserContext, private readonly tabId: string) {}
+  async export(): Promise<string> {
+    const result = await this.t.send<{ assetId: string; path?: string }>("tab_content_export", {
+      context: this.ctx,
+      tabId: this.tabId,
+      options: { format: "markdown" },
+    });
+    return result.path ?? result.assetId;
   }
 }
 
@@ -438,6 +504,7 @@ export class PlaywrightLocator {
   dblclick(options:{timeoutMs?:number;strict?:boolean}={}): Promise<void> { return this.send("playwright_locator_dblclick", options); }
   fill(value:string, options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_fill", {...options, text:value}); }
   press(key:string, options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_press", {...options, key}); }
+  type(value:string, options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_type", {...options, text:value}); }
   selectOption(value:string|string[], options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_select_option", {...options, value}); }
   setChecked(checked:boolean, options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_set_checked", {...options, checked}); }
   check(options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_check", options); }

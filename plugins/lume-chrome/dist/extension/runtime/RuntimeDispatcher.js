@@ -56,7 +56,8 @@ export class RuntimeDispatcher {
     async ready() { await Promise.all([this.sessions.ready(), this.leases.ready()]); }
     async context(p) { const ctx = requireContext(p); await this.sessions.getOrCreate(ctx); return ctx; }
     async chromeTab(tabId, ctx) { return (await this.leases.get(tabId, ctx)).chromeTabId; }
-    extensionCaps() { return { id: "chrome-extension", browserId: "chrome-extension", name: "Lume Chrome", type: "extension", clientType: "extension", protocolVersion: PROTOCOL_VERSION, generation: this.native.connectionGeneration(), metadata: {}, capabilities: { browser: [{ id: "visibility", description: "Show or hide the browser window." }, { id: "viewport", description: "Set or reset the browser viewport." }], tab: [{ id: "pageAssets", description: "Inventory and bundle rendered page assets." }] }, apiSupportOverrides: { "Tabs.content": false, "Tab.content": false, "Tab.getJsDialog": false, "Tab.markDeliverable": false, "Tab.markHandoff": false, "PlaywrightLocator.and": false, "PlaywrightLocator.or": false, "PlaywrightLocator.type": false }, permissions: { debugger: "granted", nativeMessaging: "granted", tabs: "granted", tabGroups: "granted", scripting: "granted", history: chrome.history ? "optional" : "missing", downloads: chrome.downloads ? "granted" : "missing", bookmarks: chrome.bookmarks ? "optional" : "missing" }, features: { openTabs: "available", claimTab: "available", cdp: "available", cua: "available", dom_cua: "available", playwright: "limited", pageAssets: "available", tabGroups: "available", history: "limited", contentExport: "available", fileChooser: "available", downloads: "available" } }; }
+    async showCursor(chromeTabId, x, y) { await injectScript(chromeTabId, "dist/extension/content/overlay.js").catch(() => undefined); await chrome.tabs.sendMessage(chromeTabId, { type: "LUME_CURSOR_MOVE", x, y }).catch(() => undefined); }
+    extensionCaps() { return { id: "chrome-extension", browserId: "chrome-extension", name: "Lume Chrome", type: "extension", clientType: "extension", protocolVersion: PROTOCOL_VERSION, generation: this.native.connectionGeneration(), metadata: {}, capabilities: { browser: [{ id: "visibility", description: "Show or hide the browser window." }, { id: "viewport", description: "Set or reset the browser viewport." }], tab: [{ id: "pageAssets", description: "Inventory and bundle rendered page assets." }] }, apiSupportOverrides: { "Tabs.content": false, "Tab.content": false, "Tab.getJsDialog": false, "Tab.markDeliverable": false, "Tab.markHandoff": false, "ContentAPI.export": false, "ContentAPI.exportGsuite": false }, permissions: { debugger: "granted", nativeMessaging: "granted", tabs: "granted", tabGroups: "granted", scripting: "granted", history: chrome.history ? "optional" : "missing", downloads: chrome.downloads ? "granted" : "missing", bookmarks: chrome.bookmarks ? "optional" : "missing" }, features: { openTabs: "available", claimTab: "available", cdp: "available", cua: "available", dom_cua: "available", playwright: "limited", pageAssets: "available", tabGroups: "available", history: "limited", contentExport: "available", fileChooser: "available", downloads: "available" } }; }
     async dispatch(req) {
         try {
             const p = req.params ?? {};
@@ -101,8 +102,8 @@ export class RuntimeDispatcher {
                 case "browser_user_history":
                     await this.confirmations.ensureAllowed({ kind: "history", description: "Read recent Chrome browsing history", source: "agent" }, ctx);
                     return ok(req.id, await this.userData.history(p.options ?? {}));
-                case "browser_visibility_get": return ok(req.id, await this.visibility.get());
-                case "browser_visibility_set": return ok(req.id, await this.visibility.set(p.visibility));
+                case "browser_visibility_get": return ok(req.id, (await this.visibility.get()).visibility === "visible");
+                case "browser_visibility_set": return ok(req.id, await this.visibility.set(typeof p.visible === "boolean" ? (p.visible ? "visible" : "hidden") : p.visibility));
                 case "create_tab": {
                     const tab = await chrome.tabs.create({ url: p.options?.url, active: p.options?.active ?? true });
                     const lease = await this.leases.createLease(tab.id, ctx, true);
@@ -181,23 +182,37 @@ export class RuntimeDispatcher {
                     return ok(req.id, undefined);
                 case "cua_click": {
                     const id = await this.chromeTab(p.tabId, ctx);
-                    await injectScript(id, "dist/extension/content/overlay.js").catch(() => undefined);
-                    await chrome.tabs.sendMessage(id, { type: "LUME_CURSOR_MOVE", x: p.x, y: p.y }).catch(() => undefined);
+                    await this.showCursor(id, p.x, p.y);
                     await this.cdp.click(id, p.x, p.y);
                     return ok(req.id, undefined);
                 }
-                case "cua_double_click":
-                    await this.cdp.click(await this.chromeTab(p.tabId, ctx), p.x, p.y, 2);
+                case "cua_double_click": {
+                    const id = await this.chromeTab(p.tabId, ctx);
+                    await this.showCursor(id, p.x, p.y);
+                    await this.cdp.click(id, p.x, p.y, 2);
                     return ok(req.id, undefined);
-                case "cua_move":
-                    await this.cdp.dispatchMouse(await this.chromeTab(p.tabId, ctx), "mouseMoved", p.x, p.y);
+                }
+                case "cua_move": {
+                    const id = await this.chromeTab(p.tabId, ctx);
+                    await this.showCursor(id, p.x, p.y);
+                    await this.cdp.dispatchMouse(id, "mouseMoved", p.x, p.y);
                     return ok(req.id, undefined);
-                case "cua_drag":
-                    await this.cdp.drag(await this.chromeTab(p.tabId, ctx), p.path ?? []);
+                }
+                case "cua_drag": {
+                    const id = await this.chromeTab(p.tabId, ctx);
+                    const path = p.path ?? [];
+                    const first = path[0];
+                    if (first)
+                        await this.showCursor(id, first.x, first.y);
+                    await this.cdp.drag(id, path);
                     return ok(req.id, undefined);
-                case "cua_scroll":
-                    await this.cdp.dispatchMouse(await this.chromeTab(p.tabId, ctx), "mouseWheel", p.x, p.y, { deltaX: p.scrollX ?? 0, deltaY: p.scrollY ?? 0 });
+                }
+                case "cua_scroll": {
+                    const id = await this.chromeTab(p.tabId, ctx);
+                    await this.showCursor(id, p.x, p.y);
+                    await this.cdp.dispatchMouse(id, "mouseWheel", p.x, p.y, { deltaX: p.scrollX ?? 0, deltaY: p.scrollY ?? 0 });
                     return ok(req.id, undefined);
+                }
                 case "cua_type":
                     await this.cdp.typeText(await this.chromeTab(p.tabId, ctx), p.text);
                     return ok(req.id, undefined);
@@ -247,6 +262,7 @@ export class RuntimeDispatcher {
                 case "playwright_locator_dblclick":
                 case "playwright_locator_fill":
                 case "playwright_locator_press":
+                case "playwright_locator_type":
                 case "playwright_locator_select_option":
                 case "playwright_locator_set_checked":
                 case "playwright_locator_check":

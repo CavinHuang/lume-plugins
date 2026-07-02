@@ -1,7 +1,9 @@
 # Lume Browser API Matrix
 
-This is the public browser surface exposed to Lume agents through `lume-chrome`
-and `node_repl`. The method names below match `src/client/BrowserClient.ts`.
+This is the Codex-compatible public contract exposed to Lume agents through
+`lume-chrome` and `node_repl`. The method names below match
+`src/client/BrowserClient.ts`; unsupported members are dynamically hidden by the
+selected backend descriptor rather than exposed as callable placeholders.
 
 ## Capability Summary
 
@@ -67,6 +69,22 @@ and `node_repl`. The method names below match `src/client/BrowserClient.ts`.
 | `tab.clipboard` | `read()`, `readText()`, `write()`, `writeText()` |
 | `tab.dev` | `cdpCall()`, `subscribe()`, `logs()` |
 
+Codex canonical `Tab.content`, `Tab.getJsDialog()`, `Tab.markDeliverable()`, and
+`Tab.markHandoff()` are currently dynamically hidden in the extension
+descriptor. Use `tab.exportContent()` and `browser.tabs.finalize()` until the
+canonical object shape is implemented.
+
+## Implemented Optional Capabilities
+
+| Capability | Scope | Public API |
+| --- | --- | --- |
+| `visibility` | browser | `await browser.capabilities.get("visibility")` |
+| `viewport` | browser | `await browser.capabilities.get("viewport")` |
+| `pageAssets` | tab | `await tab.capabilities.get("pageAssets")` |
+
+A capability can be obtained only when the backend advertises it and the client
+has a callable definition for it.
+
 ## Playwright And Locators
 
 Canonical method names include `locator.readAll()` and all methods in the table.
@@ -75,10 +93,21 @@ Canonical method names include `locator.readAll()` and all methods in the table.
 | --- | --- |
 | `tab.playwright` | `domSnapshot()`, `evaluate()`, `expectNavigation()`, `frameLocator()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()`, `waitForURL()`, `waitForLoadState()`, `waitForTimeout()`, `waitForEvent()` |
 | `locator` composition | `first()`, `last()`, `nth()`, `filter()`, `and()`, `or()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()` |
-| `locator` actions | `click()`, `dblclick()`, `fill()`, `press()`, `selectOption()`, `setChecked()`, `check()`, `uncheck()`, `waitFor()`, `downloadMedia()` |
+| `locator` actions | `click()`, `dblclick()`, `fill()`, `press()`, `type()`, `selectOption()`, `setChecked()`, `check()`, `uncheck()`, `waitFor()`, `downloadMedia()` |
 | `locator` readers | `getAttribute()`, `innerText()`, `textContent()`, `inputValue()`, `isVisible()`, `isEnabled()`, `isChecked()`, `count()`, `allTextContents()`, `readAll()`, `all()` |
 | `fileChooser` | `isMultiple()`, `accept()`, `setFiles()` |
 | `download` | `suggestedFilename()`, `path()` |
+
+Use `tab.playwright.waitForEvent("filechooser")` before file chooser upload
+flows.
+
+## Unavailable Codex Capabilities
+
+| Capability | Status | Reason |
+| --- | --- | --- |
+| `browserAuth` | unavailable | Secure credential handoff needs a separate Lume interruption flow. |
+| `botDetection` | unavailable | Reporting storage and host policy are not implemented. |
+| `cdp` | unavailable | Low-level `tab.dev` helpers exist, but the Codex capability object (`send`, `readEvents`) is not conformant yet. |
 
 ## CUA
 

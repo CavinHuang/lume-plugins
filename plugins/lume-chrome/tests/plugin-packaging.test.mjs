@@ -74,10 +74,30 @@ test("browser API matrix documents the public surface", async () => {
   ]) {
     assert.match(matrix, new RegExp(`\\| ${section} \\|`));
   }
+  assert.match(matrix, /Codex-compatible public contract/);
+  assert.match(matrix, /dynamically hidden/);
+  assert.match(matrix, /lumeBrowser\.control\.openUrl/);
+  assert.match(matrix, /lumeBrowser\.control\.search/);
   assert.match(matrix, /implemented/);
   assert.match(matrix, /intentionally unsupported/);
   assert.match(matrix, /`tab\.cua\.double_click\(\)`/);
   assert.match(matrix, /`tab\.dom_cua\.get_visible_dom\(\)`/);
   assert.match(matrix, /`locator\.readAll\(\)`/);
+  assert.match(matrix, /and\(\)/);
+  assert.match(matrix, /or\(\)/);
+  assert.match(matrix, /type\(\)/);
   assert.match(matrix, /`tab\.clipboard\.writeText\(\)`/);
+  assert.match(matrix, /visibility/);
+  assert.match(matrix, /viewport/);
+  assert.match(matrix, /pageAssets/);
+  assert.match(matrix, /downloadMedia/);
+  assert.match(matrix, /tab\.playwright/);
+  assert.match(matrix, /waitForEvent/);
+  assert.match(matrix, /file chooser/);
+  assert.match(matrix, /download/);
+  assert.match(matrix, /Unavailable Codex Capabilities/);
+  assert.match(matrix, /browserAuth/);
+  assert.match(matrix, /botDetection/);
+  assert.match(matrix, /cdp/);
+  assert.doesNotMatch(matrix, /webmcp.*implemented/i);
 });

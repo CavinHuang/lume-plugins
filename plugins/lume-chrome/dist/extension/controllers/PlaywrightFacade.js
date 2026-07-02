@@ -19,54 +19,54 @@ async function locatorOperation(tabId, ast, operation, payload = {}) {
         const role = (el) => el.getAttribute("role") || { A: "link", BUTTON: "button", INPUT: el.type === "checkbox" ? "checkbox" : el.type === "radio" ? "radio" : "textbox", TEXTAREA: "textbox", SELECT: "combobox", IMG: "img", OPTION: "option" }[el.tagName] || "generic";
         const allDesc = (roots, selector) => roots.flatMap(root => Array.from(root.querySelectorAll(selector)));
         const unique = (elements) => Array.from(new Set(elements));
-        let roots = [document.documentElement];
-        let current = [];
-        for (const step of inputAst.steps) {
-            if (step.kind === "frame") {
-                const frames = allDesc(roots, step.selector).filter(e => e instanceof HTMLIFrameElement);
-                roots = frames.flatMap(f => { try {
-                    return f.contentDocument?.documentElement ? [f.contentDocument.documentElement] : [];
+        const resolveAst = async (input) => {
+            let roots = [document.documentElement];
+            let current = [];
+            for (const step of input.steps) {
+                if (step.kind === "frame") {
+                    const frames = allDesc(roots, step.selector).filter(e => e instanceof HTMLIFrameElement);
+                    roots = frames.flatMap(f => { try {
+                        return f.contentDocument?.documentElement ? [f.contentDocument.documentElement] : [];
+                    }
+                    catch {
+                        return [];
+                    } });
+                    current = [];
+                    continue;
                 }
-                catch {
-                    return [];
-                } });
-                current = [];
-                continue;
-            }
-            const scope = current.length ? current : roots;
-            if (step.kind === "css" || step.kind === "locator")
-                current = allDesc(scope, step.selector);
-            else if (step.kind === "role")
-                current = allDesc(scope, "*").filter(el => role(el) === step.role && (!step.name || textMatches(accessibleName(el), step.name, step.exact)));
-            else if (step.kind === "text")
-                current = allDesc(scope, "*").filter(el => textMatches(el.textContent || "", step.text, step.exact) && !Array.from(el.children).some(c => textMatches(c.textContent || "", step.text, step.exact)));
-            else if (step.kind === "label")
-                current = allDesc(scope, "input,textarea,select,button").filter(el => textMatches(accessibleName(el), step.text, step.exact));
-            else if (step.kind === "placeholder")
-                current = allDesc(scope, "[placeholder]").filter(el => textMatches(el.getAttribute("placeholder") || "", step.text, step.exact));
-            else if (step.kind === "testId")
-                current = allDesc(scope, `[data-testid="${CSS.escape(step.testId)}"]`);
-            else if (step.kind === "filter")
-                current = current.filter(el => (!step.hasText || textMatches(el.textContent || "", step.hasText)) && (!step.hasNotText || !textMatches(el.textContent || "", step.hasNotText)));
-            else if (step.kind === "first")
-                current = current.slice(0, 1);
-            else if (step.kind === "last")
-                current = current.slice(-1);
-            else if (step.kind === "nth")
-                current = current.slice(step.index, step.index + 1);
-            else if (step.kind === "and" || step.kind === "or") {
-                const nested = await (async () => {
-                    const holder = document.createElement("div");
-                    // Nested AST is resolved from document through a small recursive call by cloning this resolver input.
-                    return await Promise.resolve([]);
-                })();
-                if (step.kind === "and")
+                const scope = current.length ? current : roots;
+                if (step.kind === "css" || step.kind === "locator")
+                    current = allDesc(scope, step.selector);
+                else if (step.kind === "role")
+                    current = allDesc(scope, "*").filter(el => role(el) === step.role && (!step.name || textMatches(accessibleName(el), step.name, step.exact)));
+                else if (step.kind === "text")
+                    current = allDesc(scope, "*").filter(el => textMatches(el.textContent || "", step.text, step.exact) && !Array.from(el.children).some(c => textMatches(c.textContent || "", step.text, step.exact)));
+                else if (step.kind === "label")
+                    current = allDesc(scope, "input,textarea,select,button").filter(el => textMatches(accessibleName(el), step.text, step.exact));
+                else if (step.kind === "placeholder")
+                    current = allDesc(scope, "[placeholder]").filter(el => textMatches(el.getAttribute("placeholder") || "", step.text, step.exact));
+                else if (step.kind === "testId")
+                    current = allDesc(scope, `[data-testid="${CSS.escape(step.testId)}"]`);
+                else if (step.kind === "filter")
+                    current = current.filter(el => (!step.hasText || textMatches(el.textContent || "", step.hasText)) && (!step.hasNotText || !textMatches(el.textContent || "", step.hasNotText)));
+                else if (step.kind === "first")
+                    current = current.slice(0, 1);
+                else if (step.kind === "last")
+                    current = current.slice(-1);
+                else if (step.kind === "nth")
+                    current = current.slice(step.index, step.index + 1);
+                else if (step.kind === "and") {
+                    const nested = await resolveAst(step.locator);
                     current = current.filter(el => nested.includes(el));
-                else
+                }
+                else if (step.kind === "or") {
+                    const nested = await resolveAst(step.locator);
                     current = unique([...current, ...nested]);
+                }
             }
-        }
-        current = unique(current);
+            return unique(current);
+        };
+        const current = await resolveAst(inputAst);
         const timeout = Math.max(0, Math.min(Number(p.timeoutMs ?? 5000), 30000));
         const waitUntil = async (predicate) => { const start = Date.now(); while (!predicate()) {
             if (Date.now() - start > timeout)
@@ -90,7 +90,7 @@ async function locatorOperation(tabId, ast, operation, payload = {}) {
         if (strict && current.length !== 1)
             throw new Error(`Strict locator violation: resolved to ${current.length} elements`);
         const el = current[0];
-        if (["click", "dblclick", "fill", "press", "selectOption", "setChecked", "check", "uncheck"].includes(op)) {
+        if (["click", "dblclick", "fill", "press", "type", "selectOption", "setChecked", "check", "uncheck"].includes(op)) {
             if (!visible(el))
                 throw new Error("Element is not visible");
             if (!enabled(el))
@@ -120,6 +120,28 @@ async function locatorOperation(tabId, ast, operation, payload = {}) {
             el.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: p.key }));
             el.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: p.key }));
             return undefined;
+        }
+        if (op === "type") {
+            const text = String(p.text ?? "");
+            el.focus?.();
+            if ("value" in el) {
+                const input = el;
+                const start = input.selectionStart ?? input.value.length;
+                const end = input.selectionEnd ?? start;
+                input.value = `${input.value.slice(0, start)}${text}${input.value.slice(end)}`;
+                const caret = start + text.length;
+                input.setSelectionRange?.(caret, caret);
+                input.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
+                input.dispatchEvent(new Event("change", { bubbles: true }));
+                return undefined;
+            }
+            if (el.isContentEditable) {
+                document.execCommand?.("insertText", false, text);
+                el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
+                el.dispatchEvent(new Event("change", { bubbles: true }));
+                return undefined;
+            }
+            throw new Error("Element is not typeable");
         }
         if (op === "selectOption") {
             if (!(el instanceof HTMLSelectElement))
