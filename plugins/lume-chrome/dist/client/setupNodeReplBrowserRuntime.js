@@ -38,6 +38,9 @@ class BrowserAppServer {
             return;
         client.send({ jsonrpc: "2.0", method, params });
     }
+    hasClient() {
+        return this.firstClient() !== null;
+    }
     async close() {
         for (const client of this.clients)
             client.close();
@@ -178,6 +181,97 @@ class WebSocketPeer {
         }
     }
 }
+class BrowserControl {
+    transport;
+    agent;
+    bridge;
+    context;
+    constructor(transport, agent, bridge, context) {
+        this.transport = transport;
+        this.agent = agent;
+        this.bridge = bridge;
+        this.context = context;
+    }
+    async getStatus() {
+        const base = this.statusBase();
+        if (!this.bridge.hasClient()) {
+            return {
+                ...base,
+                connected: false,
+                error: `No Chrome native host connected to ${this.bridge.url}`,
+            };
+        }
+        try {
+            return {
+                ...base,
+                connected: true,
+                diagnostics: await this.agent.browsers.diagnostics(),
+            };
+        }
+        catch (error) {
+            return {
+                ...base,
+                connected: false,
+                error: error instanceof Error ? error.message : String(error),
+            };
+        }
+    }
+    async openUrl(url, options = {}) {
+        this.assertConnected();
+        const browser = await this.agent.browsers.get("extension");
+        const tab = await browser.tabs.new(compact({
+            url,
+            active: options.active ?? true,
+            grouped: options.grouped,
+        }));
+        try {
+            await waitForTabLoad(tab, options);
+            return await summarizeTab(tab);
+        }
+        catch (error) {
+            await tab.close().catch(() => undefined);
+            throw error;
+        }
+    }
+    async search(input, options = {}) {
+        const searchOptions = typeof input === "string" ? { ...options, query: input } : input;
+        return this.openUrl(buildSearchUrl(searchOptions.engine ?? "baidu", searchOptions.query), searchOptions);
+    }
+    async listTabs() {
+        this.assertConnected();
+        const browser = await this.agent.browsers.get("extension");
+        return browser.user.openTabs();
+    }
+    async finalizeTabs(options = {}) {
+        this.assertConnected();
+        const keep = [];
+        const status = options.status ?? "handoff";
+        const reason = options.reason ?? "Kept by lumeBrowser.control.finalizeTabs";
+        for (const tabId of options.keepTabIds ?? []) {
+            keep.push({ tabId, status, reason });
+        }
+        if (options.keepCurrent) {
+            const selected = await this.transport.send("selected_tab", { context: this.context });
+            if (selected.tabId && !keep.some((item) => item.tabId === selected.tabId)) {
+                keep.push({ tabId: selected.tabId, status, reason });
+            }
+        }
+        await this.transport.send("finalize_tabs", { context: this.context, keep });
+        return { ok: true };
+    }
+    statusBase() {
+        return {
+            bridgeUrl: this.bridge.url,
+            browserSessionId: this.context.browserSessionId,
+            browserTurnId: this.context.browserTurnId,
+        };
+    }
+    assertConnected() {
+        if (!this.bridge.hasClient()) {
+            throw new Error(`No Chrome native host connected to ${this.bridge.url}`);
+        }
+    }
+}
 export async function createBrowserAppServer(options = {}) {
     const host = options.host ?? "127.0.0.1";
     const path = options.path ?? "/browser";
@@ -219,23 +313,97 @@ export async function createBrowserAppServer(options = {}) {
     return appServer;
 }
 export async function setupNodeReplBrowserRuntime(options = {}) {
+    const globals = options.globals ?? globalThis;
+    const existing = globals.lumeBrowser;
+    if (isNodeReplBrowserRuntimeState(existing)) {
+        const runtime = ensureBrowserControl(existing);
+        bindNodeReplBrowserGlobals(globals, runtime);
+        return runtime;
+    }
     const bridge = await createBrowserAppServer(options);
     const context = options.context ?? createDefaultBrowserContext(options);
-    const agent = { browsers: new BrowserRegistry(bridge.createTransport(), context) };
-    const globals = options.globals ?? globalThis;
-    globals.agent = agent;
-    globals.lumeBrowser = { bridge, context };
-    return { agent, bridge, context };
+    const transport = bridge.createTransport();
+    const agent = { browsers: new BrowserRegistry(transport, context) };
+    const runtime = { agent, bridge, context, control: new BrowserControl(transport, agent, bridge, context) };
+    bindNodeReplBrowserGlobals(globals, runtime);
+    return runtime;
+}
+function ensureBrowserControl(runtime) {
+    if (runtime.control)
+        return runtime;
+    const transport = runtime.bridge.createTransport();
+    runtime.control = new BrowserControl(transport, runtime.agent, runtime.bridge, runtime.context);
+    return runtime;
+}
+function bindNodeReplBrowserGlobals(globals, runtime) {
+    globals.agent = runtime.agent;
+    globals.lumeBrowser = runtime;
+    globals.lumeBrowserAgent = runtime.agent;
+    globals.lumeBrowserBridge = runtime.bridge;
+    globals.lumeBrowserControl = runtime.control;
 }
 function createDefaultBrowserContext(options) {
-    const requestMeta = globalThis.nodeRepl?.requestMeta ?? {};
-    const seed = String(requestMeta.sessionId ?? requestMeta.threadId ?? Date.now());
+    const nodeRepl = globalThis.nodeRepl;
+    const requestMeta = nodeRepl?.requestMeta ?? {};
+    const explicitSeed = requestMeta.sessionId ?? requestMeta.threadId;
+    const fallbackSeed = nodeRepl?.cwd ?? readProcessCwd() ?? "default";
+    const seed = explicitSeed === undefined
+        ? stableHash(String(fallbackSeed))
+        : safeSessionSegment(String(explicitSeed));
     return {
         browserSessionId: options.browserSessionId ?? `node-repl-${seed}`,
         browserTurnId: options.browserTurnId ?? `turn-${Date.now()}`,
         actor: "agent",
         ...(typeof requestMeta.threadId === "string" ? { threadId: requestMeta.threadId } : {}),
     };
+}
+function stableHash(value) {
+    return createHash("sha256").update(value).digest("hex").slice(0, 16);
+}
+function safeSessionSegment(value) {
+    return value.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 96) || "default";
+}
+function readProcessCwd() {
+    try {
+        const processLike = globalThis.process;
+        return typeof processLike?.cwd === "function" ? processLike.cwd() : null;
+    }
+    catch {
+        return null;
+    }
+}
+function buildSearchUrl(engine, query) {
+    const encoded = encodeURIComponent(query);
+    switch (engine) {
+        case "google":
+            return `https://www.google.com/search?q=${encoded}`;
+        case "bing":
+            return `https://www.bing.com/search?q=${encoded}`;
+        case "baidu":
+        default:
+            return `https://www.baidu.com/s?wd=${encoded}`;
+    }
+}
+async function waitForTabLoad(tab, options) {
+    await tab.playwright.waitForLoadState({
+        state: options.waitUntil === "commit" ? "domcontentloaded" : options.waitUntil ?? "load",
+        timeoutMs: options.timeoutMs,
+    });
+}
+async function summarizeTab(tab) {
+    const [url, title] = await Promise.all([
+        tab.url().then(readMaybeValue),
+        tab.title().then(readMaybeValue),
+    ]);
+    return compact({ tabId: tab.id, url, title });
+}
+function readMaybeValue(value) {
+    if (isRecord(value) && "value" in value)
+        return value.value;
+    return value;
+}
+function compact(value) {
+    return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }
 function readClientFrame(buffer) {
     const first = buffer[0];
@@ -265,4 +433,17 @@ function readClientFrame(buffer) {
 }
 function isRecord(value) {
     return !!value && typeof value === "object" && !Array.isArray(value);
+}
+function isNodeReplBrowserRuntimeState(value) {
+    if (!isRecord(value))
+        return false;
+    const bridge = value.bridge;
+    const context = value.context;
+    const agent = value.agent;
+    return !!bridge
+        && typeof bridge.createTransport === "function"
+        && typeof bridge.close === "function"
+        && !!context?.browserSessionId
+        && !!context?.browserTurnId
+        && !!agent?.browsers;
 }

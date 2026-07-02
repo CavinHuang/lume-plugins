@@ -1,54 +1,103 @@
-# Lume Browser Compatibility Surface
+# Lume Browser API Matrix
 
-Lume exposes a Codex-compatible public contract through `globalThis.agent`.
-The runtime projects each backend through the canonical API catalog; members
-that are unsupported or not yet conformant are dynamically hidden from normal
-property access and reflection.
+This is the public browser surface exposed to Lume agents through `lume-chrome`
+and `node_repl`. The method names below match `src/client/BrowserClient.ts`.
 
-## Browser Selection
+## Capability Summary
 
-| Intent | Public API |
+| Category | Status | Public API | Notes |
+| --- | --- | --- | --- |
+| browser | implemented | `agent.browsers.*`, `browser.*` | Always await `agent.browsers.get(...)`. |
+| session | implemented | `lumeBrowser.context`, `lumeBrowser.bridge.url`, `lumeBrowser.control.getStatus()` | Stable runtime globals are listed below. |
+| tab | implemented | `browser.tabs.*`, `browser.user.*`, `tab.*` | Use `browser.tabs.new()`, not `browser.tabs.create`. |
+| navigation | implemented | `tab.goto()`, `tab.back()`, `tab.forward()`, `tab.reload()`, `lumeBrowser.control.openUrl()` | Prefer the facade for simple page opens. |
+| locator | implemented | `tab.playwright` locator builders and locator operations | Preferred for stable element interaction. |
+| playwright | implemented | snapshots, evaluation, navigation waits, event waits | There is no `browser.utils.wait`. |
+| cua | implemented | `tab.dom_cua.*`, `tab.cua.*` | Prefer DOM CUA over coordinates. |
+| screenshot | implemented | `tab.screenshot()` | Returns `Uint8Array`; emit as a data URL with `nodeRepl.emitImage`. |
+| finalize | implemented | `browser.tabs.finalize()`, `release()`, `handoff()`, `lumeBrowser.control.finalizeTabs()` | Finalize every browser turn. |
+| diagnostics | implemented | `agent.browsers.diagnostics()`, `lumeBrowser.control.getStatus()` | The facade fails fast when no native host is connected. |
+| search | implemented | `lumeBrowser.control.search({ engine, query })` | Supports `baidu`, `bing`, and `google`. |
+| raw protocol | reference-only | `BrowserCommandType` in `src/shared/protocol.ts` | Do not send raw commands when a client method exists. |
+| direct bridge state | intentionally unsupported | `bridge.isConnected`, `bridge.reconnect` | Use `lumeBrowser.control.getStatus()`. |
+| invented tab helpers | intentionally unsupported | `browser.tabs.create`, `browser.tabs.open`, `browser.user.open`, `agent.navigate` | These APIs do not exist. |
+| generic wait helpers | intentionally unsupported | `browser.utils.wait`, global `wait(ms)` | Use targeted Playwright waits. |
+
+## Stable Runtime Globals
+
+| Global | Status | Purpose |
+| --- | --- | --- |
+| `agent` | implemented | Entry point for low-level browser APIs. |
+| `lumeBrowser` | implemented | Runtime object with `agent`, `bridge`, `context`, and `control`. |
+| `lumeBrowserAgent` | implemented | Alias for `lumeBrowser.agent`. |
+| `lumeBrowserBridge` | implemented | Alias for `lumeBrowser.bridge`; public uses are `url` and `close()`. |
+| `lumeBrowserControl` | implemented | Alias for `lumeBrowser.control`. |
+
+## High-Level Facade
+
+| API | Status | Purpose |
+| --- | --- | --- |
+| `lumeBrowser.control.openUrl(url, options?)` | implemented | Open one tab and wait for its load state. |
+| `lumeBrowser.control.search(query, options?)` | implemented | Search with the default or selected engine. |
+| `lumeBrowser.control.search({ engine, query, ...options })` | implemented | Object form of search. |
+| `lumeBrowser.control.listTabs()` | implemented | List user-visible Chrome tabs. |
+| `lumeBrowser.control.getStatus()` | implemented | Diagnose bridge/native-host connectivity without throwing. |
+| `lumeBrowser.control.finalizeTabs(options?)` | implemented | Finalize the turn and optionally retain selected tab IDs. |
+
+## Browser And Session
+
+| Object | Implemented methods |
 | --- | --- |
-| Explicit Chrome state | `agent.browsers.get("extension")` |
-| URL known, backend unspecified | `agent.browsers.getForUrl(url)` |
-| No URL or backend preference | `agent.browsers.getDefault()` |
-| Discover registered backends | `agent.browsers.list()` |
+| `agent.browsers` | `get()`, `list()`, `diagnostics()` |
+| `browser` | `documentation()`, `nameSession()` |
+| `browser.visibility` | `get()`, `set()` |
+| `browser.viewport` | `set()`, `reset()` |
+| `browser.sitePermissions` | `list()`, `allowForSession()`, `alwaysAllow()`, `block()`, `clear()` |
+| `browser.capabilities` | `list()`, `get()`; returned capability has `documentation()` |
+| `browser.user` | `openTabs()`, `claimTab()`, `history()`, `topSites()`, `recentSessions()` |
 
-Call `await browser.documentation()` after selection. It combines backend-safe
-guidance, the effective API member list, and available lookup documents.
+## Tabs And Navigation
 
-## Current Extension Projection
-
-The extension descriptor currently exposes the contract members that have
-passed this phase's conformance boundary. The following object paths are
-available:
-
-| Object | Effective public members |
+| Object | Implemented methods |
 | --- | --- |
-| `browser` | `browserId`, `capabilities`, `tabs`, `user`, `documentation()`, `nameSession()` |
-| `browser.user` | `openTabs()`, `claimTab()` |
-| `browser.tabs` | `new()`, `get()`, `selected()`, `list()` |
-| `tab` | `id`, `capabilities`, `close()`, `title()`, `url()`, `goto()`, `back()`, `forward()`, `reload()`, `screenshot()` |
+| `browser.tabs` | `new()`, `get()`, `selected()`, `list()`, `sessionTabs()`, `finalize()`, `release()`, `handoff()`, `resumeHandoff()` |
+| `tab` | `close()`, `title()`, `url()`, `goto()`, `back()`, `forward()`, `reload()`, `screenshot()`, `exportContent()` |
+| `tab.capabilities` | `list()`, `get()` |
+| `tab.capabilities.pageAssets` | `list()`, `bundle()`, `documentation()` |
+| `tab.clipboard` | `read()`, `readText()`, `write()`, `writeText()` |
+| `tab.dev` | `cdpCall()`, `subscribe()`, `logs()` |
 
-The extension currently advertises no optional capability objects. A capability
-can be obtained only when the backend advertises it and the client has a
-callable definition for it.
+## Playwright And Locators
 
-## Hidden Surface
+Canonical method names include `locator.readAll()` and all methods in the table.
 
-These implementation paths are intentionally not part of the current extension
-projection: Playwright, DOM CUA, coordinate CUA, clipboard, dev/CDP, content,
-tab finalization, history, and dialog helpers. They remain dynamically hidden
-until their command parameters, return values, safety policy, and conformance
-tests match the public contract.
+| Object | Implemented methods |
+| --- | --- |
+| `tab.playwright` | `domSnapshot()`, `evaluate()`, `expectNavigation()`, `frameLocator()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()`, `waitForURL()`, `waitForLoadState()`, `waitForTimeout()`, `waitForEvent()` |
+| `locator` composition | `first()`, `last()`, `nth()`, `filter()`, `and()`, `or()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()` |
+| `locator` actions | `click()`, `dblclick()`, `fill()`, `press()`, `selectOption()`, `setChecked()`, `check()`, `uncheck()`, `waitFor()`, `downloadMedia()` |
+| `locator` readers | `getAttribute()`, `innerText()`, `textContent()`, `inputValue()`, `isVisible()`, `isEnabled()`, `isChecked()`, `count()`, `allTextContents()`, `readAll()`, `all()` |
+| `fileChooser` | `isMultiple()`, `accept()`, `setFiles()` |
+| `download` | `suggestedFilename()`, `path()` |
 
-The temporary Node REPL WebSocket bootstrap is an implementation detail, not an
-Agent API. Direct bridge state and helper facades must not be used by skills.
-`webmcp` is internal and not public.
+## CUA
 
-## Object Lifetime
+Canonical method names include `tab.dom_cua.get_visible_dom()` and
+`tab.cua.double_click()`.
 
-Browser objects are tied to the backend generation from which they were
-created. After backend refresh or native reconnection changes that generation,
-old command-bearing objects reject locally with `Browser object is stale`.
-Select the browser again before continuing.
+| Object | Implemented methods |
+| --- | --- |
+| `tab.dom_cua` | `get_visible_dom()`, `click()`, `double_click()`, `type()`, `keypress()`, `scroll()`, `downloadMedia()` |
+| `tab.cua` | `click()`, `double_click()`, `move()`, `drag()`, `scroll()`, `type()`, `keypress()`, `downloadMedia()` |
+
+Clipboard methods use the canonical names `tab.clipboard.read()`,
+`tab.clipboard.readText()`, `tab.clipboard.write()`, and
+`tab.clipboard.writeText()`.
+
+Prefer the high-level facade for ordinary user tasks:
+
+```js
+var result = await lumeBrowser.control.search({ engine: "baidu", query: "glm" });
+await lumeBrowser.control.finalizeTabs({ keepTabIds: [result.tabId] });
+nodeRepl.write(JSON.stringify(result));
+```

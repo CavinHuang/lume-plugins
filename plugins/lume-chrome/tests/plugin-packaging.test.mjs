@@ -31,24 +31,53 @@ test("browser skill starts through Lume node_repl MCP", async () => {
 
   assert.match(skill, /^name:\s*lume-chrome$/m);
   assert.match(skill, /mcp__node_repl__js/);
-  assert.match(skill, /setupBrowserRuntime|setupNodeReplBrowserRuntime/);
-  assert.match(skill, /agent\.browsers\.getForUrl/);
-  assert.match(skill, /agent\.browsers\.getDefault/);
+  assert.match(skill, /setupNodeReplBrowserRuntime/);
+  assert.match(skill, /var\s+fs\s*=\s*await import/);
+  assert.match(skill, /tabs\.new\(\{\s*url:/);
+  assert.match(skill, /Do not use top-level `const` or `let`/);
+  assert.match(skill, /If this skill was activated with a concrete user request/);
+  assert.match(skill, /When the user explicitly activates this skill, use it even for a public page/);
+  assert.match(skill, /Do not use `browser\.tabs\.create`/);
+  assert.match(skill, /Do not use `browser\.utils\.wait`/);
+  assert.match(skill, /Do not use `bridge\.isConnected`/);
+  assert.match(skill, /Always `await agent\.browsers\.get/);
   assert.match(skill, /browser\.documentation\(\)/);
-  assert.doesNotMatch(skill, /lumeBrowser\.control/);
-  assert.doesNotMatch(skill, /browserControl|lumeBrowserControl/);
+  assert.match(skill, /tab\.playwright\.domSnapshot\(\)/);
+  assert.match(skill, /tab\.dom_cua\.get_visible_dom\(\)/);
+  assert.match(skill, /nodeRepl\.emitImage/);
+  assert.match(skill, /docs[\\/]+browser-api-matrix\.md/);
+  assert.doesNotMatch(skill, /const\s+fs\s*=\s*await import/);
+  assert.doesNotMatch(skill, /const\s+browser\s*=/);
+  assert.doesNotMatch(skill, /const\s+tabs\s*=/);
+  assert.doesNotMatch(skill, /const\s+tab\s*=/);
+  assert.doesNotMatch(skill, /const\s+result\s*=/);
+  assert.doesNotMatch(skill, /browser\.user\.updateTab/);
   assert.doesNotMatch(skill, /D:\\\\workspace/);
   assert.doesNotMatch(skill, /@lume\/browser-client/);
   assert.doesNotMatch(skill, /setupBrowserRuntime\(\{ transport, context \}\)/);
 });
 
-test("browser API matrix documents the projected compatibility surface", async () => {
+test("browser API matrix documents the public surface", async () => {
   const matrix = await readText(join("docs", "browser-api-matrix.md"));
 
-  assert.match(matrix, /Codex-compatible public contract/);
-  assert.match(matrix, /dynamically hidden/);
-  assert.match(matrix, /agent\.browsers\.getForUrl/);
-  assert.match(matrix, /agent\.browsers\.getDefault/);
-  assert.doesNotMatch(matrix, /lumeBrowser\.control/);
-  assert.doesNotMatch(matrix, /webmcp.*implemented/i);
+  for (const section of [
+    "browser",
+    "session",
+    "tab",
+    "navigation",
+    "locator",
+    "playwright",
+    "cua",
+    "screenshot",
+    "finalize",
+    "diagnostics"
+  ]) {
+    assert.match(matrix, new RegExp(`\\| ${section} \\|`));
+  }
+  assert.match(matrix, /implemented/);
+  assert.match(matrix, /intentionally unsupported/);
+  assert.match(matrix, /`tab\.cua\.double_click\(\)`/);
+  assert.match(matrix, /`tab\.dom_cua\.get_visible_dom\(\)`/);
+  assert.match(matrix, /`locator\.readAll\(\)`/);
+  assert.match(matrix, /`tab\.clipboard\.writeText\(\)`/);
 });

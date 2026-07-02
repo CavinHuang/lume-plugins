@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, type BrowserBackendDescriptor, type BrowserContext, type RpcRequest, type RpcResponse } from "../../shared/protocol";
+import { PROTOCOL_VERSION, type BrowserCapabilities, type BrowserContext, type RpcRequest, type RpcResponse } from "../../shared/protocol";
 import { BrowserRuntimeException, BrowserErrorCodes } from "../../shared/errors";
 import { SessionStore } from "./SessionStore";
 import { TabLeaseManager } from "./TabLeaseManager";
@@ -22,7 +22,8 @@ import { injectScript, evalInPage } from "../controllers/PageScript";
 import type { NativeTransport } from "./NativeTransport";
 import { locatorAst } from "../../shared/locator";
 
-function ok<T>(id:string,result:T):RpcResponse<T>{return{jsonrpc:"2.0",id,result};}
+export function createSuccessResponse<T>(id:string,result:T):RpcResponse<T|null>{return{jsonrpc:"2.0",id,result:result===undefined?null:result};}
+const ok=createSuccessResponse;
 function fail(id:string,code:string,message:string,details?:unknown):RpcResponse{return{jsonrpc:"2.0",id,error:{code,message,details,recoverable:true}};}
 function requireContext(p:any):BrowserContext{if(!p?.context?.browserSessionId||!p?.context?.browserTurnId)throw new BrowserRuntimeException(BrowserErrorCodes.UNSUPPORTED,"Missing required browser session_id or turn_id");return p.context;}
 
@@ -55,11 +56,11 @@ export class RuntimeDispatcher {
   async ready(){await Promise.all([this.sessions.ready(),this.leases.ready()]);}
   private async context(p:any){const ctx=requireContext(p);await this.sessions.getOrCreate(ctx);return ctx;}
   private async chromeTab(tabId:string,ctx:BrowserContext){return(await this.leases.get(tabId,ctx)).chromeTabId;}
-  private extensionCaps():BrowserBackendDescriptor{return{id:"extension",name:"Lume Chrome",type:"extension",protocolVersion:PROTOCOL_VERSION,generation:this.native.connectionGeneration(),metadata:{},capabilities:{browser:[],tab:[]},apiSupportOverrides:{"BrowserUser.history":false,"Tabs.content":false,"Tabs.finalize":false,"Tab.clipboard":false,"Tab.content":false,"Tab.cua":false,"Tab.dev":false,"Tab.dom_cua":false,"Tab.getJsDialog":false,"Tab.markDeliverable":false,"Tab.markHandoff":false,"Tab.playwright":false}};}
+  private extensionCaps():BrowserCapabilities{return{id:"chrome-extension",browserId:"chrome-extension",name:"Lume Chrome",type:"extension",clientType:"extension",protocolVersion:PROTOCOL_VERSION,generation:this.native.connectionGeneration(),metadata:{},capabilities:{browser:[{id:"visibility",description:"Show or hide the browser window."},{id:"viewport",description:"Set or reset the browser viewport."}],tab:[{id:"pageAssets",description:"Inventory and bundle rendered page assets."}]},apiSupportOverrides:{"Tabs.content":false,"Tab.content":false,"Tab.getJsDialog":false,"Tab.markDeliverable":false,"Tab.markHandoff":false,"PlaywrightLocator.and":false,"PlaywrightLocator.or":false,"PlaywrightLocator.type":false},permissions:{debugger:"granted",nativeMessaging:"granted",tabs:"granted",tabGroups:"granted",scripting:"granted",history:chrome.history?"optional":"missing",downloads:chrome.downloads?"granted":"missing",bookmarks:chrome.bookmarks?"optional":"missing"},features:{openTabs:"available",claimTab:"available",cdp:"available",cua:"available",dom_cua:"available",playwright:"limited",pageAssets:"available",tabGroups:"available",history:"limited",contentExport:"available",fileChooser:"available",downloads:"available"}};}
   async dispatch(req:RpcRequest):Promise<RpcResponse>{
     try{
       const p:any=req.params??{};
-      if(req.method==="runtime_list_browsers")return ok(req.id,[this.extensionCaps()]);
+      if(req.method==="runtime_list_browsers")return ok(req.id,[this.extensionCaps(),{browserId:"in-app",clientType:"iab",protocolVersion:PROTOCOL_VERSION,permissions:{},features:{runtime:"unavailable"}},{browserId:"cdp",clientType:"cdp",protocolVersion:PROTOCOL_VERSION,permissions:{},features:{runtime:"unavailable"}}]);
       if(req.method==="runtime_ping"){
         if(p.clientType&&p.clientType!=="extension")throw new BrowserRuntimeException("E_BROWSER_UNAVAILABLE",`Browser backend is not available in this extension runtime: ${p.clientType}`);
         return ok(req.id,this.extensionCaps());

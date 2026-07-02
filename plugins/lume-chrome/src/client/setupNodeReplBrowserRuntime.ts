@@ -1,23 +1,17 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import type { BrowserTransport } from "./BrowserClient";
-import { setupBrowserRuntime } from "./setupBrowserRuntime";
-import type { BrowserCommandType, BrowserContext, RpcRequest, RpcResponse } from "../shared/protocol";
+import { BrowserRegistry, type BrowserTransport, type Tab } from "./BrowserClient";
+import type {
+  BrowserCommandType,
+  BrowserContext,
+  FinalizeTabKeep,
+  RpcRequest,
+  RpcResponse,
+  UserTabInfo
+} from "../shared/protocol";
 
 type ConfirmationDecision = { approved: boolean; remember?: "session" | "always" | "block" };
 type JsonRecord = Record<string, unknown>;
-
-const DOCUMENT_FILES: Record<string, string> = {
-  "api-use-behavior": "API.md",
-  "browser-safety": "SECURITY_MODEL.md",
-  "browser-troubleshooting": "TROUBLESHOOTING.md",
-  "chrome-troubleshooting": "TROUBLESHOOTING.md",
-  confirmations: "CONFIRMATIONS.md",
-  "file-uploads": "PLAYWRIGHT.md",
-  "tab-claiming-chrome": "API.md",
-  "tab-cleanup-chrome": "API.md",
-};
 
 export interface BrowserAppServerOptions {
   host?: string;
@@ -33,6 +27,56 @@ export interface SetupNodeReplBrowserRuntimeOptions extends BrowserAppServerOpti
   browserTurnId?: string;
   context?: BrowserContext;
   globals?: Record<string, unknown>;
+}
+
+interface NodeReplBrowserRuntimeState {
+  agent: { browsers: BrowserRegistry };
+  bridge: BrowserAppServer;
+  context: BrowserContext;
+  control: NodeReplBrowserControl;
+}
+
+export interface BrowserControlOpenOptions {
+  active?: boolean;
+  grouped?: boolean;
+  waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit";
+  timeoutMs?: number;
+}
+
+export interface BrowserControlSearchOptions extends BrowserControlOpenOptions {
+  engine?: "baidu" | "bing" | "google";
+  query: string;
+}
+
+export interface BrowserControlTabResult {
+  tabId: string;
+  url?: string;
+  title?: string;
+}
+
+export interface BrowserControlFinalizeOptions {
+  keepCurrent?: boolean;
+  keepTabIds?: string[];
+  status?: FinalizeTabKeep["status"];
+  reason?: string;
+}
+
+export interface BrowserControlStatus {
+  bridgeUrl: string;
+  browserSessionId: string;
+  browserTurnId: string;
+  connected: boolean;
+  diagnostics?: unknown;
+  error?: string;
+}
+
+export interface NodeReplBrowserControl {
+  getStatus(): Promise<BrowserControlStatus>;
+  openUrl(url: string, options?: BrowserControlOpenOptions): Promise<BrowserControlTabResult>;
+  search(query: string, options?: Omit<BrowserControlSearchOptions, "query">): Promise<BrowserControlTabResult>;
+  search(options: BrowserControlSearchOptions): Promise<BrowserControlTabResult>;
+  listTabs(): Promise<UserTabInfo[]>;
+  finalizeTabs(options?: BrowserControlFinalizeOptions): Promise<{ ok: true }>;
 }
 
 interface PendingRequest {
@@ -81,6 +125,10 @@ class BrowserAppServer {
     const client = this.firstClient();
     if (!client) return;
     client.send({ jsonrpc: "2.0", method, params });
+  }
+
+  hasClient(): boolean {
+    return this.firstClient() !== null;
   }
 
   async close(): Promise<void> {
@@ -224,6 +272,106 @@ class WebSocketPeer {
   }
 }
 
+class BrowserControl implements NodeReplBrowserControl {
+  constructor(
+    private readonly transport: BrowserTransport,
+    private readonly agent: { browsers: BrowserRegistry },
+    private readonly bridge: BrowserAppServer,
+    private readonly context: BrowserContext,
+  ) {}
+
+  async getStatus(): Promise<BrowserControlStatus> {
+    const base = this.statusBase();
+    if (!this.bridge.hasClient()) {
+      return {
+        ...base,
+        connected: false,
+        error: `No Chrome native host connected to ${this.bridge.url}`,
+      };
+    }
+
+    try {
+      return {
+        ...base,
+        connected: true,
+        diagnostics: await this.agent.browsers.diagnostics(),
+      };
+    } catch (error) {
+      return {
+        ...base,
+        connected: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  async openUrl(url: string, options: BrowserControlOpenOptions = {}): Promise<BrowserControlTabResult> {
+    this.assertConnected();
+    const browser = await this.agent.browsers.get("extension");
+    const tab = await browser.tabs.new(compact({
+      url,
+      active: options.active ?? true,
+      grouped: options.grouped,
+    }));
+    try {
+      await waitForTabLoad(tab, options);
+      return await summarizeTab(tab);
+    } catch (error) {
+      await tab.close().catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async search(
+    input: string | BrowserControlSearchOptions,
+    options: Omit<BrowserControlSearchOptions, "query"> = {},
+  ): Promise<BrowserControlTabResult> {
+    const searchOptions = typeof input === "string" ? { ...options, query: input } : input;
+    return this.openUrl(buildSearchUrl(searchOptions.engine ?? "baidu", searchOptions.query), searchOptions);
+  }
+
+  async listTabs(): Promise<UserTabInfo[]> {
+    this.assertConnected();
+    const browser = await this.agent.browsers.get("extension");
+    return browser.user.openTabs();
+  }
+
+  async finalizeTabs(options: BrowserControlFinalizeOptions = {}): Promise<{ ok: true }> {
+    this.assertConnected();
+    const keep: FinalizeTabKeep[] = [];
+    const status = options.status ?? "handoff";
+    const reason = options.reason ?? "Kept by lumeBrowser.control.finalizeTabs";
+
+    for (const tabId of options.keepTabIds ?? []) {
+      keep.push({ tabId, status, reason });
+    }
+
+    if (options.keepCurrent) {
+      const selected = await this.transport.send<{ tabId?: string }>("selected_tab", { context: this.context });
+      if (selected.tabId && !keep.some((item) => item.tabId === selected.tabId)) {
+        keep.push({ tabId: selected.tabId, status, reason });
+      }
+    }
+
+    await this.transport.send("finalize_tabs", { context: this.context, keep });
+    return { ok: true };
+  }
+
+  private statusBase(): Omit<BrowserControlStatus, "connected"> {
+    return {
+      bridgeUrl: this.bridge.url,
+      browserSessionId: this.context.browserSessionId,
+      browserTurnId: this.context.browserTurnId,
+    };
+  }
+
+  private assertConnected(): void {
+    if (!this.bridge.hasClient()) {
+      throw new Error(`No Chrome native host connected to ${this.bridge.url}`);
+    }
+  }
+}
+
 export async function createBrowserAppServer(options: BrowserAppServerOptions = {}): Promise<BrowserAppServer> {
   const host = options.host ?? "127.0.0.1";
   const path = options.path ?? "/browser";
@@ -269,35 +417,105 @@ export async function createBrowserAppServer(options: BrowserAppServerOptions = 
 
 export async function setupNodeReplBrowserRuntime(options: SetupNodeReplBrowserRuntimeOptions = {}) {
   const globals = options.globals ?? globalThis as unknown as Record<string, unknown>;
+  const existing = globals.lumeBrowser;
+  if (isNodeReplBrowserRuntimeState(existing)) {
+    const runtime = ensureBrowserControl(existing);
+    bindNodeReplBrowserGlobals(globals, runtime);
+    return runtime;
+  }
+
   const bridge = await createBrowserAppServer(options);
   const context = options.context ?? createDefaultBrowserContext(options);
   const transport = bridge.createTransport();
-  const browserRuntime = await setupBrowserRuntime({
-    context,
-    globals,
-    transport,
-    readDocument: readPluginDocument,
-  });
-  const agent = browserRuntime.agent;
-  globals.lumeBrowser = { bridge, context };
-  return { agent, bridge, context };
+  const agent = { browsers: new BrowserRegistry(transport, context) };
+  const runtime = { agent, bridge, context, control: new BrowserControl(transport, agent, bridge, context) };
+  bindNodeReplBrowserGlobals(globals, runtime);
+  return runtime;
 }
 
-async function readPluginDocument(name: string): Promise<string> {
-  const file = DOCUMENT_FILES[name];
-  if (!file) throw new Error(`Unknown browser documentation: ${name}`);
-  return await readFile(new URL(`../../docs/${file}`, import.meta.url), "utf8");
+function ensureBrowserControl(runtime: NodeReplBrowserRuntimeState): NodeReplBrowserRuntimeState {
+  if (runtime.control) return runtime;
+  const transport = runtime.bridge.createTransport();
+  runtime.control = new BrowserControl(transport, runtime.agent, runtime.bridge, runtime.context);
+  return runtime;
+}
+
+function bindNodeReplBrowserGlobals(globals: Record<string, unknown>, runtime: NodeReplBrowserRuntimeState): void {
+  globals.agent = runtime.agent;
+  globals.lumeBrowser = runtime;
+  globals.lumeBrowserAgent = runtime.agent;
+  globals.lumeBrowserBridge = runtime.bridge;
+  globals.lumeBrowserControl = runtime.control;
 }
 
 function createDefaultBrowserContext(options: SetupNodeReplBrowserRuntimeOptions): BrowserContext {
-  const requestMeta = (globalThis as unknown as { nodeRepl?: { requestMeta?: JsonRecord } }).nodeRepl?.requestMeta ?? {};
-  const seed = String(requestMeta.sessionId ?? requestMeta.threadId ?? Date.now());
+  const nodeRepl = (globalThis as unknown as { nodeRepl?: { cwd?: string; requestMeta?: JsonRecord } }).nodeRepl;
+  const requestMeta = nodeRepl?.requestMeta ?? {};
+  const explicitSeed = requestMeta.sessionId ?? requestMeta.threadId;
+  const fallbackSeed = nodeRepl?.cwd ?? readProcessCwd() ?? "default";
+  const seed = explicitSeed === undefined
+    ? stableHash(String(fallbackSeed))
+    : safeSessionSegment(String(explicitSeed));
   return {
     browserSessionId: options.browserSessionId ?? `node-repl-${seed}`,
     browserTurnId: options.browserTurnId ?? `turn-${Date.now()}`,
     actor: "agent",
     ...(typeof requestMeta.threadId === "string" ? { threadId: requestMeta.threadId } : {}),
   };
+}
+
+function stableHash(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
+}
+
+function safeSessionSegment(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 96) || "default";
+}
+
+function readProcessCwd(): string | null {
+  try {
+    const processLike = (globalThis as unknown as { process?: { cwd?: () => string } }).process;
+    return typeof processLike?.cwd === "function" ? processLike.cwd() : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildSearchUrl(engine: BrowserControlSearchOptions["engine"], query: string): string {
+  const encoded = encodeURIComponent(query);
+  switch (engine) {
+    case "google":
+      return `https://www.google.com/search?q=${encoded}`;
+    case "bing":
+      return `https://www.bing.com/search?q=${encoded}`;
+    case "baidu":
+    default:
+      return `https://www.baidu.com/s?wd=${encoded}`;
+  }
+}
+
+async function waitForTabLoad(tab: Tab, options: BrowserControlOpenOptions): Promise<void> {
+  await tab.playwright.waitForLoadState({
+    state: options.waitUntil === "commit" ? "domcontentloaded" : options.waitUntil ?? "load",
+    timeoutMs: options.timeoutMs,
+  });
+}
+
+async function summarizeTab(tab: Tab): Promise<BrowserControlTabResult> {
+  const [url, title] = await Promise.all([
+    tab.url().then(readMaybeValue),
+    tab.title().then(readMaybeValue),
+  ]);
+  return compact({ tabId: tab.id, url, title });
+}
+
+function readMaybeValue<T>(value: T | { value?: T } | undefined): T | undefined {
+  if (isRecord(value) && "value" in value) return value.value as T | undefined;
+  return value as T | undefined;
+}
+
+function compact<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 }
 
 function readClientFrame(buffer: any): { opcode: number; payload: any; bytesRead: number } | null {
@@ -326,4 +544,17 @@ function readClientFrame(buffer: any): { opcode: number; payload: any; bytesRead
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNodeReplBrowserRuntimeState(value: unknown): value is NodeReplBrowserRuntimeState {
+  if (!isRecord(value)) return false;
+  const bridge = value.bridge as { createTransport?: unknown; close?: unknown } | undefined;
+  const context = value.context as BrowserContext | undefined;
+  const agent = value.agent as { browsers?: unknown } | undefined;
+  return !!bridge
+    && typeof bridge.createTransport === "function"
+    && typeof bridge.close === "function"
+    && !!context?.browserSessionId
+    && !!context?.browserTurnId
+    && !!agent?.browsers;
 }

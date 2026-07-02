@@ -6,10 +6,12 @@ export class NativeTransport {
     reconnectAlarm = "lume-native-transport-reconnect";
     pending = new Map();
     seq = 1;
+    generation = 0;
     constructor(onMessage) {
         this.onMessage = onMessage;
     }
     getStatus() { return { status: this.status, host: NATIVE_HOST_NAME, connected: this.port !== null, updatedAt: Date.now() }; }
+    connectionGeneration() { return this.generation; }
     start() {
         chrome.alarms.onAlarm.addListener((a) => { if (a.name === this.reconnectAlarm && !this.port)
             this.connect(); });
@@ -20,6 +22,7 @@ export class NativeTransport {
             return;
         try {
             this.port = chrome.runtime.connectNative(NATIVE_HOST_NAME);
+            this.generation += 1;
             this.status = "connected";
             void chrome.storage.local.set({ NATIVE_HOST_STATUS: this.getStatus() });
             this.port.onMessage.addListener((message) => void this.handleIncoming(message));

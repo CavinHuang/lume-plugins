@@ -20,7 +20,8 @@ import { ContentExportController } from "../controllers/ContentExportController.
 import { ConfirmationClient } from "../controllers/ConfirmationClient.js";
 import { injectScript, evalInPage } from "../controllers/PageScript.js";
 import { locatorAst } from "../../shared/locator.js";
-function ok(id, result) { return { jsonrpc: "2.0", id, result }; }
+export function createSuccessResponse(id, result) { return { jsonrpc: "2.0", id, result: result === undefined ? null : result }; }
+const ok = createSuccessResponse;
 function fail(id, code, message, details) { return { jsonrpc: "2.0", id, error: { code, message, details, recoverable: true } }; }
 function requireContext(p) { if (!p?.context?.browserSessionId || !p?.context?.browserTurnId)
     throw new BrowserRuntimeException(BrowserErrorCodes.UNSUPPORTED, "Missing required browser session_id or turn_id"); return p.context; }
@@ -55,7 +56,7 @@ export class RuntimeDispatcher {
     async ready() { await Promise.all([this.sessions.ready(), this.leases.ready()]); }
     async context(p) { const ctx = requireContext(p); await this.sessions.getOrCreate(ctx); return ctx; }
     async chromeTab(tabId, ctx) { return (await this.leases.get(tabId, ctx)).chromeTabId; }
-    extensionCaps() { return { browserId: "chrome-extension", clientType: "extension", protocolVersion: PROTOCOL_VERSION, permissions: { debugger: "granted", nativeMessaging: "granted", tabs: "granted", tabGroups: "granted", scripting: "granted", history: chrome.history ? "optional" : "missing", downloads: chrome.downloads ? "granted" : "missing", bookmarks: chrome.bookmarks ? "optional" : "missing" }, features: { openTabs: "available", claimTab: "available", cdp: "available", cua: "available", dom_cua: "available", playwright: "limited", pageAssets: "available", tabGroups: "available", history: "limited", contentExport: "available", fileChooser: "available", downloads: "available" } }; }
+    extensionCaps() { return { id: "chrome-extension", browserId: "chrome-extension", name: "Lume Chrome", type: "extension", clientType: "extension", protocolVersion: PROTOCOL_VERSION, generation: this.native.connectionGeneration(), metadata: {}, capabilities: { browser: [{ id: "visibility", description: "Show or hide the browser window." }, { id: "viewport", description: "Set or reset the browser viewport." }], tab: [{ id: "pageAssets", description: "Inventory and bundle rendered page assets." }] }, apiSupportOverrides: { "Tabs.content": false, "Tab.content": false, "Tab.getJsDialog": false, "Tab.markDeliverable": false, "Tab.markHandoff": false, "PlaywrightLocator.and": false, "PlaywrightLocator.or": false, "PlaywrightLocator.type": false }, permissions: { debugger: "granted", nativeMessaging: "granted", tabs: "granted", tabGroups: "granted", scripting: "granted", history: chrome.history ? "optional" : "missing", downloads: chrome.downloads ? "granted" : "missing", bookmarks: chrome.bookmarks ? "optional" : "missing" }, features: { openTabs: "available", claimTab: "available", cdp: "available", cua: "available", dom_cua: "available", playwright: "limited", pageAssets: "available", tabGroups: "available", history: "limited", contentExport: "available", fileChooser: "available", downloads: "available" } }; }
     async dispatch(req) {
         try {
             const p = req.params ?? {};

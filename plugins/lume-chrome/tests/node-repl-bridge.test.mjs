@@ -143,3 +143,170 @@ test("node_repl bridge auto-approves extension confirmation requests by default"
   client.close();
   await server.close();
 });
+
+test("node_repl browser runtime setup reuses an existing bridge from globals", async () => {
+  const { setupNodeReplBrowserRuntime } = await import("../dist/client/setupNodeReplBrowserRuntime.js");
+  const globals = {};
+
+  const first = await setupNodeReplBrowserRuntime({ port: 0, globals });
+  const second = await setupNodeReplBrowserRuntime({ port: 0, globals });
+
+  try {
+    assert.equal(second.bridge, first.bridge);
+    assert.equal(second.agent, first.agent);
+    assert.equal(second.context, first.context);
+  } finally {
+    await first.bridge.close();
+    if (second.bridge !== first.bridge) await second.bridge.close();
+  }
+});
+
+test("node_repl browser runtime uses a stable fallback session without request metadata", async () => {
+  const { setupNodeReplBrowserRuntime } = await import("../dist/client/setupNodeReplBrowserRuntime.js");
+
+  const first = await setupNodeReplBrowserRuntime({ port: 0, globals: {} });
+  try {
+    await first.bridge.close();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const second = await setupNodeReplBrowserRuntime({ port: 0, globals: {} });
+    try {
+      assert.equal(second.context.browserSessionId, first.context.browserSessionId);
+      assert.doesNotMatch(first.context.browserSessionId, /^node-repl-\d+$/);
+    } finally {
+      await second.bridge.close();
+    }
+  } finally {
+    await first.bridge.close().catch(() => undefined);
+  }
+});
+
+test("node_repl browser runtime exposes agent-friendly browser control helpers", async () => {
+  const { setupNodeReplBrowserRuntime } = await import("../dist/client/setupNodeReplBrowserRuntime.js");
+  const globals = {};
+  const runtime = await setupNodeReplBrowserRuntime({ port: 0, globals });
+  const client = await connectRawWebSocket(runtime.bridge.url);
+
+  async function respond(result) {
+    const request = await client.nextJson();
+    client.send({ jsonrpc: "2.0", id: request.id, result: result ?? null });
+    return request;
+  }
+
+  try {
+    assert.equal(globals.lumeBrowserControl, runtime.control);
+    assert.equal(globals.lumeBrowserAgent, runtime.agent);
+    assert.equal(globals.lumeBrowserBridge, runtime.bridge);
+
+    const open = runtime.control.openUrl("https://example.com", { waitUntil: "domcontentloaded" });
+    assert.equal((await respond({ browserId: "extension" })).method, "runtime_ping");
+    const createTab = await respond({ tabId: "tab-open" });
+    assert.equal(createTab.method, "create_tab");
+    assert.deepEqual(createTab.params.options, { url: "https://example.com", active: true });
+    assert.equal((await respond(undefined)).method, "playwright_wait_for_load_state");
+    assert.equal((await respond({ value: "https://example.com/" })).method, "tab_url");
+    assert.equal((await respond({ value: "Example" })).method, "tab_title");
+    assert.deepEqual(await open, {
+      tabId: "tab-open",
+      url: "https://example.com/",
+      title: "Example"
+    });
+
+    const listTabs = runtime.control.listTabs();
+    assert.equal((await respond({ browserId: "extension" })).method, "runtime_ping");
+    assert.equal((await respond([{ id: "user-tab-1", url: "https://example.com/" }])).method, "browser_user_open_tabs");
+    assert.deepEqual(await listTabs, [{ id: "user-tab-1", url: "https://example.com/" }]);
+
+    const search = runtime.control.search({ engine: "baidu", query: "glm" });
+    assert.equal((await respond({ browserId: "extension" })).method, "runtime_ping");
+    const searchTab = await respond({ tabId: "tab-search" });
+    assert.equal(searchTab.method, "create_tab");
+    assert.match(searchTab.params.options.url, /^https:\/\/www\.baidu\.com\/s\?wd=glm$/);
+    assert.equal((await respond(undefined)).method, "playwright_wait_for_load_state");
+    assert.equal((await respond({ value: "https://www.baidu.com/s?wd=glm" })).method, "tab_url");
+    assert.equal((await respond({ value: "glm_百度搜索" })).method, "tab_title");
+    assert.deepEqual(await search, {
+      tabId: "tab-search",
+      url: "https://www.baidu.com/s?wd=glm",
+      title: "glm_百度搜索"
+    });
+
+    const finalize = runtime.control.finalizeTabs({ keepCurrent: true });
+    assert.equal((await respond({ tabId: "tab-search" })).method, "selected_tab");
+    assert.equal((await respond(undefined)).method, "finalize_tabs");
+    assert.deepEqual(await finalize, { ok: true });
+
+    const status = runtime.control.getStatus();
+    assert.equal((await respond({ connected: true })).method, "runtime_diagnostics");
+    assert.deepEqual(await status, {
+      bridgeUrl: runtime.bridge.url,
+      browserSessionId: runtime.context.browserSessionId,
+      browserTurnId: runtime.context.browserTurnId,
+      connected: true,
+      diagnostics: { connected: true }
+    });
+  } finally {
+    client.close();
+    await runtime.bridge.close();
+  }
+});
+
+test("node_repl browser control reports and rejects a disconnected native host without waiting", async () => {
+  const { setupNodeReplBrowserRuntime } = await import("../dist/client/setupNodeReplBrowserRuntime.js");
+  const runtime = await setupNodeReplBrowserRuntime({
+    port: 0,
+    globals: {},
+    requestTimeoutMs: 200,
+  });
+
+  try {
+    const status = await runtime.control.getStatus();
+    assert.equal(status.connected, false);
+    assert.match(status.error, /No Chrome native host connected/);
+
+    const outcome = await Promise.race([
+      runtime.control.openUrl("https://example.com").then(
+        () => ({ kind: "resolved" }),
+        (error) => ({ kind: "rejected", error }),
+      ),
+      new Promise((resolve) => setTimeout(() => resolve({ kind: "pending" }), 50)),
+    ]);
+
+    assert.equal(outcome.kind, "rejected");
+    assert.match(outcome.error.message, /No Chrome native host connected/);
+  } finally {
+    await runtime.bridge.close();
+  }
+});
+
+test("node_repl browser control closes a newly created tab when openUrl fails", async () => {
+  const { setupNodeReplBrowserRuntime } = await import("../dist/client/setupNodeReplBrowserRuntime.js");
+  const runtime = await setupNodeReplBrowserRuntime({ port: 0, globals: {} });
+  const client = await connectRawWebSocket(runtime.bridge.url);
+
+  try {
+    const open = runtime.control.openUrl("https://example.com");
+    const rejected = assert.rejects(open, /load timed out/);
+
+    const ping = await client.nextJson();
+    client.send({ jsonrpc: "2.0", id: ping.id, result: { browserId: "extension" } });
+    const createTab = await client.nextJson();
+    client.send({ jsonrpc: "2.0", id: createTab.id, result: { tabId: "tab-failed" } });
+    const waitForLoad = await client.nextJson();
+    client.send({
+      jsonrpc: "2.0",
+      id: waitForLoad.id,
+      error: { code: "E_LOAD_TIMEOUT", message: "load timed out" },
+    });
+
+    const closeTab = await client.nextJson();
+    assert.equal(closeTab.method, "close_tab");
+    assert.equal(closeTab.params.tabId, "tab-failed");
+    client.send({ jsonrpc: "2.0", id: closeTab.id, result: null });
+
+    await rejected;
+  } finally {
+    client.close();
+    await runtime.bridge.close();
+  }
+});
