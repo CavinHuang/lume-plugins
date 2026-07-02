@@ -30,9 +30,10 @@ available:
 | `browser` | `browserId`, `capabilities`, `tabs`, `user`, `documentation()`, `nameSession()` |
 | `browser.user` | `openTabs()`, `claimTab()`, `history()` |
 | `browser.tabs` | `new()`, `get()`, `selected()`, `list()`, `finalize()` |
-| `tab` | `id`, `capabilities`, `clipboard`, `content`, `playwright`, `close()`, `title()`, `url()`, `goto()`, `back()`, `forward()`, `reload()`, `screenshot()`, `markDeliverable()`, `markHandoff()` |
+| `tab` | `id`, `capabilities`, `clipboard`, `content`, `cua`, `playwright`, `close()`, `title()`, `url()`, `goto()`, `back()`, `forward()`, `reload()`, `screenshot()`, `markDeliverable()`, `markHandoff()` |
 | `tab.content` | `export()` |
 | `tab.clipboard` | `readText()`, `writeText()` |
+| `tab.cua` | `move()`, `click()`, `double_click()`, `drag()`, `scroll()`, `type()`, `keypress()` |
 | `tab.playwright` | `domSnapshot()`, `evaluate()`, `expectNavigation()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()`, `waitForURL()`, `waitForLoadState()`, `waitForTimeout()` |
 | `tab.playwright.locator(...)` | `click()`, `dblclick()`, `fill()`, `press()`, `selectOption()`, `setChecked()`, `check()`, `uncheck()`, `getAttribute()`, `innerText()`, `textContent()`, `inputValue()`, `isVisible()`, `isEnabled()`, `isChecked()`, `count()`, `all()`, `allTextContents()`, `filter()`, `first()`, `last()`, `locator()`, `nth()`, `waitFor()` |
 
@@ -42,7 +43,9 @@ available:
 Chrome history search options and returns ISO `dateVisited` values.
 `tab.content.export()` returns a local asset path from the existing content
 export controller. `tab.clipboard.readText()` and `writeText()` expose only the
-plain text clipboard path.
+plain text clipboard path. `tab.cua` sends coordinate mouse and keyboard actions
+through CDP; coordinate mouse actions also move the visible Lume cursor overlay
+before dispatching input.
 
 ### Playwright core
 
@@ -66,7 +69,7 @@ has a callable definition for it.
 ## Hidden Surface
 
 These implementation paths are intentionally not part of the current extension
-projection: DOM CUA, coordinate CUA, rich clipboard, `exportGsuite()`,
+projection: DOM CUA, CUA `downloadMedia()`, rich clipboard, `exportGsuite()`,
 background `Tabs.content(...)`, dev/CDP, dialog helpers, Playwright event/frame
 helpers, file chooser upload, and download flows. They remain dynamically
 hidden until their command parameters, return values, safety policy, and

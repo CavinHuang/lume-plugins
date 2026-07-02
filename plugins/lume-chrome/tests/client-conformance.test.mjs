@@ -10,8 +10,10 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
     generation: 7,
     apiSupportOverrides: {
       "ContentAPI.exportGsuite": false,
+      "CUAAPI.downloadMedia": false,
       "Tabs.content": false,
       "Tab.getJsDialog": false,
+      "Tab.dom_cua": false,
       "TabClipboardAPI.read": false,
       "TabClipboardAPI.write": false,
       "PlaywrightAPI.elementInfo": false,
@@ -43,6 +45,8 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
   fake.respond("tab_content_export", { assetId: "asset-1", path: "C:\\tmp\\page.md" });
   fake.respond("tab_clipboard_read_text", "clipboard text");
   fake.respond("tab_clipboard_write_text", undefined);
+  fake.respond("cua_move", undefined);
+  fake.respond("cua_click", undefined);
 
   const globals = {};
   const runtime = await setupBrowserRuntime({
@@ -93,6 +97,21 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
   await tab.clipboard.writeText("new clipboard text");
   const clipboardWrite = fake.calls.find((call) => call.method === "tab_clipboard_write_text");
   assert.equal(clipboardWrite.params.text, "new clipboard text");
+  assert.equal(tab.dom_cua, undefined);
+  assert.equal(typeof tab.cua.move, "function");
+  assert.equal(typeof tab.cua.click, "function");
+  assert.equal(tab.cua.downloadMedia, undefined);
+  await tab.cua.move({ x: 12, y: 34 });
+  await tab.cua.click({ x: 56, y: 78 });
+  assert.deepEqual(
+    fake.calls
+      .filter((call) => call.method === "cua_move" || call.method === "cua_click")
+      .map((call) => ({ method: call.method, x: call.params.x, y: call.params.y })),
+    [
+      { method: "cua_move", x: 12, y: 34 },
+      { method: "cua_click", x: 56, y: 78 },
+    ],
+  );
   assert.equal(typeof tab.markDeliverable, "function");
   assert.equal(typeof tab.markHandoff, "function");
   await tab.markDeliverable("ready for user");

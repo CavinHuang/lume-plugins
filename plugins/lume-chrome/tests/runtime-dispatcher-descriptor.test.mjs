@@ -4,12 +4,13 @@ import test from "node:test";
 import { RuntimeDispatcher } from "../dist/extension/runtime/RuntimeDispatcher.js";
 import { PROTOCOL_VERSION } from "../dist/shared/protocol.js";
 
-function createDispatcher() {
+function createDispatcher(chromeOverrides = {}) {
   globalThis.chrome = {
     debugger: {
       onEvent: { addListener() {} },
       onDetach: { addListener() {} },
     },
+    ...chromeOverrides,
   };
   const native = {
     connectionGeneration: () => 12,
@@ -56,8 +57,8 @@ test("runtime descriptor advertises only implemented extension capabilities", as
     },
     apiSupportOverrides: {
       "ContentAPI.exportGsuite": false,
+      "CUAAPI.downloadMedia": false,
       "Tabs.content": false,
-      "Tab.cua": false,
       "Tab.dev": false,
       "Tab.dom_cua": false,
       "Tab.getJsDialog": false,
@@ -129,4 +130,64 @@ test("visibility capability adapts between public booleans and controller state"
   await dispatch(dispatcher, "browser_visibility_set", { visible: false });
 
   assert.equal(received, "hidden");
+});
+
+test("coordinate CUA mouse actions show the overlay cursor before CDP input", async () => {
+  const events = [];
+  const injections = [];
+  const dispatcher = createDispatcher({
+    scripting: {
+      async executeScript(details) {
+        injections.push(details);
+      },
+    },
+    tabs: {
+      async sendMessage(tabId, message) {
+        events.push({ type: "cursor", tabId, message });
+        return { ok: true };
+      },
+    },
+  });
+  dispatcher.leases.get = async () => ({ chromeTabId: 99 });
+  dispatcher.cdp.click = async (tabId, x, y, clickCount = 1) => {
+    events.push({ type: "cdpClick", tabId, x, y, clickCount });
+  };
+  dispatcher.cdp.dispatchMouse = async (tabId, eventType, x, y, params = {}) => {
+    events.push({ type: "cdpMouse", tabId, eventType, x, y, params });
+  };
+  dispatcher.cdp.drag = async (tabId, path) => {
+    events.push({ type: "cdpDrag", tabId, path });
+  };
+
+  await dispatch(dispatcher, "cua_move", { tabId: "lume-tab:1", x: 10, y: 20 });
+  await dispatch(dispatcher, "cua_click", { tabId: "lume-tab:1", x: 30, y: 40 });
+  await dispatch(dispatcher, "cua_double_click", { tabId: "lume-tab:1", x: 50, y: 60 });
+  await dispatch(dispatcher, "cua_drag", { tabId: "lume-tab:1", path: [{ x: 70, y: 80 }, { x: 90, y: 100 }] });
+  await dispatch(dispatcher, "cua_scroll", { tabId: "lume-tab:1", x: 110, y: 120, scrollY: 400 });
+
+  assert.deepEqual(
+    events.map((event) => event.type === "cursor" ? { type: event.type, x: event.message.x, y: event.message.y } : event),
+    [
+      { type: "cursor", x: 10, y: 20 },
+      { type: "cdpMouse", tabId: 99, eventType: "mouseMoved", x: 10, y: 20, params: {} },
+      { type: "cursor", x: 30, y: 40 },
+      { type: "cdpClick", tabId: 99, x: 30, y: 40, clickCount: 1 },
+      { type: "cursor", x: 50, y: 60 },
+      { type: "cdpClick", tabId: 99, x: 50, y: 60, clickCount: 2 },
+      { type: "cursor", x: 70, y: 80 },
+      { type: "cdpDrag", tabId: 99, path: [{ x: 70, y: 80 }, { x: 90, y: 100 }] },
+      { type: "cursor", x: 110, y: 120 },
+      { type: "cdpMouse", tabId: 99, eventType: "mouseWheel", x: 110, y: 120, params: { deltaX: 0, deltaY: 400 } },
+    ],
+  );
+  assert.deepEqual(
+    injections.map((details) => ({ tabId: details.target.tabId, files: details.files })),
+    [
+      { tabId: 99, files: ["dist/extension/content/overlay.js"] },
+      { tabId: 99, files: ["dist/extension/content/overlay.js"] },
+      { tabId: 99, files: ["dist/extension/content/overlay.js"] },
+      { tabId: 99, files: ["dist/extension/content/overlay.js"] },
+      { tabId: 99, files: ["dist/extension/content/overlay.js"] },
+    ],
+  );
 });
