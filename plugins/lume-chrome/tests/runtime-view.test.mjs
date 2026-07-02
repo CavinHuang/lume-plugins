@@ -72,6 +72,16 @@ class FileChooser {
   }
 }
 
+class BrowserRegistry {
+  list() {
+    return [];
+  }
+
+  get() {
+    return "visible";
+  }
+}
+
 test("hidden members disappear from property and reflection APIs", () => {
   const project = createRuntimeView(new Set(["Tab.markHandoff"]));
   const tab = project(new Tab());
@@ -127,6 +137,16 @@ test("known current constructor names map to public contract names", () => {
   assert.equal("setFiles" in fileChooser, false);
   assert.equal(Object.getPrototypeOf(fileChooser).setFiles, undefined);
   assert.equal(fileChooser.isMultiple(), true);
+});
+
+test("BrowserRegistry constructor name maps to Browsers contract", () => {
+  const project = createRuntimeView(new Set(["Browsers.list"]));
+  const browsers = project(new BrowserRegistry());
+
+  assert.equal(browsers.list, undefined);
+  assert.equal("list" in browsers, false);
+  assert.equal(Object.getPrototypeOf(browsers).list, undefined);
+  assert.equal(browsers.get(), "visible");
 });
 
 test("visible methods still work and repeated reads are stable", () => {

@@ -4,6 +4,7 @@ type AnyFunction = (...args: unknown[]) => unknown;
 type CachedMethod = { source: AnyFunction; wrapper: AnyFunction };
 
 const CONSTRUCTOR_NAME_ALIASES: Record<string, string> = {
+  BrowserRegistry: "Browsers",
   ClipboardAPI: "TabClipboardAPI",
   Download: "PlaywrightDownload",
   FileChooser: "PlaywrightFileChooser",
