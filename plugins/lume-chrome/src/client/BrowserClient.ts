@@ -1,9 +1,12 @@
 import type {
-  BrowserCapabilities, BrowserCommandType, BrowserContext, CapabilityInfo, DiagnosticsReport, DomSnapshot,
-  DownloadInfo, FileChooserInfo, FinalizeTabKeep, LocatorPayload, PageAssetBundleResult,
-  PageAssetInventoryItem, RpcRequest, RpcResponse, SessionTabInfo, SitePermissionRecord, UserTabInfo, VisibleDomNode
+  BrowserCapabilities, BrowserCommandType, BrowserContext, DiagnosticsReport, DomSnapshot,
+  DownloadInfo, FileChooserInfo, FinalizeTabKeep, LocatorPayload, RpcRequest, RpcResponse,
+  SessionTabInfo, SitePermissionRecord, UserTabInfo, VisibleDomNode
 } from "../shared/protocol";
 import { appendLocator, locatorAst, type LocatorAst, type LocatorStep, type TextMatcher } from "../shared/locator";
+import { CapabilityCollection, createCapabilityDefinitions } from "./capabilities";
+
+const CAPABILITY_DEFINITIONS = createCapabilityDefinitions();
 
 export interface BrowserTransport {
   send<T = unknown>(method: BrowserCommandType, params: unknown): Promise<T>;
@@ -41,43 +44,6 @@ export class BrowserRegistry {
   }
 }
 
-class CapabilityCollection {
-  constructor(
-    private readonly t: BrowserTransport,
-    private readonly ctx: BrowserContext,
-    private readonly scope: "browser" | "tab",
-    private readonly tabId?: string
-  ) {}
-  list(): Promise<CapabilityInfo[]> {
-    return this.t.send(this.scope === "browser" ? "browser_capabilities_list" : "tab_capabilities_list", {
-      context: this.ctx,
-      tabId: this.tabId
-    });
-  }
-  async get(id: string): Promise<Capability> {
-    const info = (await this.list()).find((item) => item.id === id);
-    if (!info) throw new Error(`Capability not available: ${id}`);
-    return new Capability(this.t, this.ctx, this.scope, info, this.tabId);
-  }
-}
-
-class Capability {
-  constructor(
-    private readonly t: BrowserTransport,
-    private readonly ctx: BrowserContext,
-    private readonly scope: "browser" | "tab",
-    public readonly info: CapabilityInfo,
-    private readonly tabId?: string
-  ) {}
-  documentation(): Promise<string> {
-    return this.t.send(this.scope === "browser" ? "browser_capability_documentation" : "tab_capability_documentation", {
-      context: this.ctx,
-      tabId: this.tabId,
-      capabilityId: this.info.id
-    });
-  }
-}
-
 export class Browser {
   readonly browserId: string;
   readonly user: BrowserUser;
@@ -85,21 +51,18 @@ export class Browser {
   readonly capabilities: CapabilityCollection;
   constructor(private readonly t: BrowserTransport, private readonly ctx: BrowserContext, public readonly info: BrowserCapabilities) {
     this.browserId = info.browserId;
-    this.user = new BrowserUser(t, ctx);
-    this.tabs = new Tabs(t, ctx);
-    this.capabilities = new CapabilityCollection(t, ctx, "browser");
+    this.user = new BrowserUser(t, ctx, info);
+    this.tabs = new Tabs(t, ctx, info);
+    this.capabilities = new CapabilityCollection({
+      advertised: info.capabilities.browser,
+      browserId: info.browserId,
+      definitions: CAPABILITY_DEFINITIONS,
+      scope: "browser",
+      transport: t,
+    });
   }
   documentation(): Promise<string> { return this.t.send("browser_documentation", { context: this.ctx }); }
   nameSession(name: string): Promise<void> { return this.t.send("browser_name_session", { context: this.ctx, name }); }
-  visibility = {
-    get: () => this.t.send<{ visibility: string }>("browser_visibility_get", { context: this.ctx }),
-    set: (visibility: "visible" | "hidden") => this.t.send<void>("browser_visibility_set", { context: this.ctx, visibility })
-  };
-  viewport = {
-    set: (options: { width: number; height: number; deviceScaleFactor?: number; mobile?: boolean }) =>
-      this.t.send<void>("browser_viewport_set", { context: this.ctx, options }),
-    reset: () => this.t.send<void>("browser_viewport_reset", { context: this.ctx })
-  };
   sitePermissions = {
     list: () => this.t.send<SitePermissionRecord[]>("browser_site_permissions_list", { context: this.ctx }),
     allowForSession: (host: string) => this.t.send<void>("browser_site_permission_set", { context: this.ctx, host, decision: "allow_session" }),
@@ -110,12 +73,16 @@ export class Browser {
 }
 
 export class BrowserUser {
-  constructor(private readonly t: BrowserTransport, private readonly ctx: BrowserContext) {}
+  constructor(
+    private readonly t: BrowserTransport,
+    private readonly ctx: BrowserContext,
+    private readonly browser: BrowserCapabilities,
+  ) {}
   openTabs(): Promise<UserTabInfo[]> { return this.t.send("browser_user_open_tabs", { context: this.ctx }); }
   async claimTab(tab: UserTabInfo | string): Promise<Tab> {
     const tabId = typeof tab === "string" ? tab : tab.id;
     const result = await this.t.send<{ tabId: string }>("browser_user_claim_tab", { context: this.ctx, tabId });
-    return new Tab(this.t, this.ctx, result.tabId);
+    return new Tab(this.t, this.ctx, result.tabId, this.browser);
   }
   history(options: { text?: string; maxResults?: number; startTime?: number; endTime?: number } = {}): Promise<Array<{url:string; title?:string; lastVisitTime?:number}>> {
     return this.t.send("browser_user_history", { context: this.ctx, options });
@@ -125,18 +92,22 @@ export class BrowserUser {
 }
 
 export class Tabs {
-  constructor(private readonly t: BrowserTransport, private readonly ctx: BrowserContext) {}
+  constructor(
+    private readonly t: BrowserTransport,
+    private readonly ctx: BrowserContext,
+    private readonly browser: BrowserCapabilities,
+  ) {}
   async new(options: { url?: string; active?: boolean; grouped?: boolean } = {}): Promise<Tab> {
     const r = await this.t.send<{tabId:string}>("create_tab", { context: this.ctx, options });
-    return new Tab(this.t, this.ctx, r.tabId);
+    return new Tab(this.t, this.ctx, r.tabId, this.browser);
   }
   async get(id: string): Promise<Tab> {
     const r = await this.t.send<{tabId:string}>("get_tab", { context: this.ctx, tabId: id });
-    return new Tab(this.t, this.ctx, r.tabId);
+    return new Tab(this.t, this.ctx, r.tabId, this.browser);
   }
   async selected(): Promise<Tab | undefined> {
     const r = await this.t.send<{tabId?:string}>("selected_tab", { context: this.ctx });
-    return r.tabId ? new Tab(this.t, this.ctx, r.tabId) : undefined;
+    return r.tabId ? new Tab(this.t, this.ctx, r.tabId, this.browser) : undefined;
   }
   list(): Promise<SessionTabInfo[]> { return this.t.send("list_tabs", { context: this.ctx }); }
   sessionTabs(): Promise<SessionTabInfo[]> { return this.t.send("get_session_tabs", { context: this.ctx }); }
@@ -144,7 +115,8 @@ export class Tabs {
   release(tabIds: string[]): Promise<void> { return this.t.send("release_tabs", { context: this.ctx, tabIds }); }
   handoff(tabIds: string[]): Promise<void> { return this.t.send("handoff_tabs", { context: this.ctx, tabIds }); }
   resumeHandoff(): Promise<Tab[]> {
-    return this.t.send<Array<{tabId:string}>>("resume_handoff_tabs", { context: this.ctx }).then(xs => xs.map(x => new Tab(this.t, this.ctx, x.tabId)));
+    return this.t.send<Array<{tabId:string}>>("resume_handoff_tabs", { context: this.ctx })
+      .then(xs => xs.map(x => new Tab(this.t, this.ctx, x.tabId, this.browser)));
   }
 }
 
@@ -152,14 +124,26 @@ export class Tab {
   readonly cua: CUAAPI;
   readonly dom_cua: DomCUAAPI;
   readonly playwright: PlaywrightAPI;
-  readonly capabilities: CapabilityCollection & { pageAssets: PageAssetsCapability };
+  readonly capabilities: CapabilityCollection;
   readonly clipboard: ClipboardAPI;
   readonly dev: TabDevAPI;
-  constructor(private readonly t: BrowserTransport, private readonly ctx: BrowserContext, public readonly id: string) {
+  constructor(
+    private readonly t: BrowserTransport,
+    private readonly ctx: BrowserContext,
+    public readonly id: string,
+    browser: BrowserCapabilities,
+  ) {
     this.cua = new CUAAPI(t, ctx, id);
     this.dom_cua = new DomCUAAPI(t, ctx, id);
     this.playwright = new PlaywrightAPI(t, ctx, id);
-    this.capabilities = Object.assign(new CapabilityCollection(t, ctx, "tab", id), { pageAssets: new PageAssetsCapability(t, ctx, id) });
+    this.capabilities = new CapabilityCollection({
+      advertised: browser.capabilities.tab,
+      browserId: browser.browserId,
+      definitions: CAPABILITY_DEFINITIONS,
+      scope: "tab",
+      tabId: id,
+      transport: t,
+    });
     this.clipboard = new ClipboardAPI(t, ctx, id);
     this.dev = new TabDevAPI(t, ctx, id);
   }
@@ -304,17 +288,6 @@ export class Download {
   suggestedFilename(): string | undefined { return this.info.filename?.split(/[\\/]/).pop(); }
   path(): Promise<string | undefined> {
     return this.t.send<{path?:string}>("playwright_download_path", { context:this.ctx, downloadId:this.info.downloadId }).then(r=>r.path);
-  }
-}
-
-class PageAssetsCapability {
-  constructor(private readonly t: BrowserTransport, private readonly ctx: BrowserContext, private readonly tabId: string) {}
-  list(): Promise<PageAssetInventoryItem[]> { return this.t.send("tab_page_assets_list", { context:this.ctx, tabId:this.tabId }); }
-  bundle(options:{ inventoryIds?:string[]; kinds?:string[] }={}): Promise<PageAssetBundleResult> {
-    return this.t.send("tab_page_assets_bundle", { context:this.ctx, tabId:this.tabId, options });
-  }
-  documentation(): Promise<string> {
-    return this.t.send("tab_capability_documentation", { context:this.ctx, tabId:this.tabId, capabilityId:"pageAssets" });
   }
 }
 
