@@ -33,6 +33,20 @@ class Tabs {
   }
 }
 
+const PrototypeMethodTabs = class Tabs {
+  constructor(tab) {
+    this.tab = tab;
+  }
+
+  finalize() {
+    return "hidden";
+  }
+
+  get() {
+    return this.tab;
+  }
+};
+
 class Tab {
   constructor(id = "tab-1") {
     this.id = id;
@@ -139,6 +153,42 @@ test("hidden prototype methods do not leak through the proxy prototype", () => {
   assert.equal("markHandoff" in tab, false);
   assert.equal(Object.getPrototypeOf(tab).markHandoff, undefined);
   assert.equal(tab.title(), "title:tab-1");
+});
+
+test("__proto__ and getPrototypeOf expose only sanitized prototype methods", () => {
+  const project = createRuntimeView(new Set(["Tabs.finalize"]));
+  const tabs = project(new PrototypeMethodTabs(new Tab()));
+
+  assert.equal(tabs.finalize, undefined);
+  assert.equal(tabs.__proto__, Object.getPrototypeOf(tabs));
+  assert.equal(tabs.__proto__.finalize, undefined);
+  assert.equal(Object.getPrototypeOf(tabs).finalize, undefined);
+  assert.equal(tabs.get().title(), "title:tab-1");
+});
+
+test("sanitized prototype constructor cannot expose hidden raw prototype methods", () => {
+  const project = createRuntimeView(new Set(["Tabs.finalize"]));
+  const tabs = project(new PrototypeMethodTabs(new Tab()));
+  const protoConstructor = Object.getOwnPropertyDescriptor(
+    Object.getPrototypeOf(tabs),
+    "constructor",
+  )?.value;
+  const dunderConstructor = Object.getOwnPropertyDescriptor(tabs.__proto__, "constructor")?.value;
+
+  assert.equal(protoConstructor?.prototype?.finalize, undefined);
+  assert.equal(dunderConstructor?.prototype?.finalize, undefined);
+  assert.equal(tabs.get().title(), "title:tab-1");
+});
+
+test("setPrototypeOf cannot swap sanitized prototype for raw prototype", () => {
+  const project = createRuntimeView(new Set(["Tabs.finalize"]));
+  const tabs = project(new PrototypeMethodTabs(new Tab()));
+
+  assert.equal(Reflect.setPrototypeOf(tabs, PrototypeMethodTabs.prototype), false);
+  assert.throws(() => Object.setPrototypeOf(tabs, PrototypeMethodTabs.prototype), TypeError);
+  assert.equal(tabs.finalize, undefined);
+  assert.equal(Object.getPrototypeOf(tabs).finalize, undefined);
+  assert.equal(tabs.get().title(), "title:tab-1");
 });
 
 test("known current constructor names map to public contract names", () => {

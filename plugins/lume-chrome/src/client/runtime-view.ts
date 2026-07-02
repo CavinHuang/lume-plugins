@@ -36,7 +36,8 @@ export function createRuntimeView(disabled: Set<string>) {
 
     const shadow = Object.create(sanitizedPrototypeFor(raw, interfaceName));
     const proxy = new Proxy(shadow, {
-      get(_target, property) {
+      get(target, property) {
+        if (property === "__proto__") return Reflect.getPrototypeOf(target);
         if (isHidden(interfaceName, property)) return undefined;
 
         const value = Reflect.get(raw, property, raw);
@@ -66,6 +67,10 @@ export function createRuntimeView(disabled: Set<string>) {
       },
 
       preventExtensions() {
+        return false;
+      },
+
+      setPrototypeOf() {
         return false;
       },
     });
