@@ -48,6 +48,20 @@ class Tab {
   }
 }
 
+const PrototypeMethodTab = class Tab {
+  constructor(id = "tab-1") {
+    this.id = id;
+  }
+
+  markHandoff() {
+    return "hidden";
+  }
+
+  title() {
+    return `title:${this.id}`;
+  }
+};
+
 test("hidden members disappear from property and reflection APIs", () => {
   const project = createRuntimeView(new Set(["Tab.markHandoff"]));
   const tab = project(new Tab());
@@ -56,6 +70,32 @@ test("hidden members disappear from property and reflection APIs", () => {
   assert.equal("markHandoff" in tab, false);
   assert.equal(Reflect.ownKeys(tab).includes("markHandoff"), false);
   assert.equal(Object.getOwnPropertyDescriptor(tab, "markHandoff"), undefined);
+});
+
+test("hidden non-configurable own members do not violate proxy invariants", () => {
+  const project = createRuntimeView(new Set(["Tab.markHandoff"]));
+  const raw = new Tab();
+  Object.defineProperty(raw, "markHandoff", {
+    configurable: false,
+    value: () => "hidden",
+    writable: false,
+  });
+  const tab = project(raw);
+
+  assert.equal(tab.markHandoff, undefined);
+  assert.equal("markHandoff" in tab, false);
+  assert.equal(Reflect.ownKeys(tab).includes("markHandoff"), false);
+  assert.equal(Object.getOwnPropertyDescriptor(tab, "markHandoff"), undefined);
+});
+
+test("hidden prototype methods do not leak through the proxy prototype", () => {
+  const project = createRuntimeView(new Set(["Tab.markHandoff"]));
+  const tab = project(new PrototypeMethodTab());
+
+  assert.equal(tab.markHandoff, undefined);
+  assert.equal("markHandoff" in tab, false);
+  assert.equal(Object.getPrototypeOf(tab).markHandoff, undefined);
+  assert.equal(tab.title(), "title:tab-1");
 });
 
 test("visible methods still work and repeated reads are stable", () => {

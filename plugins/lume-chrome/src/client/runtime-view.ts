@@ -7,6 +7,7 @@ export function createRuntimeView(disabled: Set<string>) {
   const rawToProxy = new WeakMap<object, object>();
   const proxyToRaw = new WeakMap<object, object>();
   const methodCache = new WeakMap<object, Map<PropertyKey, CachedMethod>>();
+  const prototypeCache = new WeakMap<object, Map<string, object>>();
 
   function project<T>(value: T): T {
     if (!isObject(value)) return value;
@@ -21,39 +22,71 @@ export function createRuntimeView(disabled: Set<string>) {
     return projectObjectFields(value) as T;
   }
 
-  function proxyFor(target: object, interfaceName: string): object {
-    const cached = rawToProxy.get(target);
+  function proxyFor(raw: object, interfaceName: string): object {
+    const cached = rawToProxy.get(raw);
     if (cached) return cached;
 
-    const proxy = new Proxy(target, {
-      get(target, property) {
+    const shadow = Object.create(sanitizedPrototypeFor(raw, interfaceName));
+    const proxy = new Proxy(shadow, {
+      get(_target, property) {
         if (isHidden(interfaceName, property)) return undefined;
 
-        const value = Reflect.get(target, property, target);
-        if (typeof value === "function") return methodFor(target, property, value);
+        const value = Reflect.get(raw, property, raw);
+        if (typeof value === "function") return methodFor(raw, property, value);
         return project(value);
       },
 
-      has(target, property) {
-        return !isHidden(interfaceName, property) && Reflect.has(target, property);
+      has(_target, property) {
+        return !isHidden(interfaceName, property) && Reflect.has(raw, property);
       },
 
-      ownKeys(target) {
-        return Reflect.ownKeys(target).filter((property) => !isHidden(interfaceName, property));
+      ownKeys() {
+        return Reflect.ownKeys(raw).filter((property) => !isHidden(interfaceName, property));
       },
 
-      getOwnPropertyDescriptor(target, property) {
+      getOwnPropertyDescriptor(_target, property) {
         if (isHidden(interfaceName, property)) return undefined;
 
-        const descriptor = Reflect.getOwnPropertyDescriptor(target, property);
-        if (!descriptor || !("value" in descriptor)) return descriptor;
-        return { ...descriptor, value: project(descriptor.value) };
+        const descriptor = Reflect.getOwnPropertyDescriptor(raw, property);
+        if (!descriptor) return undefined;
+        if (!("value" in descriptor)) return { ...descriptor, configurable: true };
+        return { ...descriptor, configurable: true, value: project(descriptor.value) };
       },
     });
 
-    rawToProxy.set(target, proxy);
-    proxyToRaw.set(proxy, target);
+    rawToProxy.set(raw, proxy);
+    proxyToRaw.set(proxy, raw);
     return proxy;
+  }
+
+  function sanitizedPrototypeFor(raw: object, interfaceName: string): object | null {
+    const prototype = Object.getPrototypeOf(raw);
+    if (prototype === null) return null;
+    return sanitizedPrototype(prototype, interfaceName);
+  }
+
+  function sanitizedPrototype(prototype: object, interfaceName: string): object {
+    let cachedByInterface = prototypeCache.get(prototype);
+    if (!cachedByInterface) {
+      cachedByInterface = new Map();
+      prototypeCache.set(prototype, cachedByInterface);
+    }
+
+    const cached = cachedByInterface.get(interfaceName);
+    if (cached) return cached;
+
+    const parent = Object.getPrototypeOf(prototype);
+    const sanitized = Object.create(parent === null ? null : sanitizedPrototype(parent, interfaceName));
+    cachedByInterface.set(interfaceName, sanitized);
+
+    for (const property of Reflect.ownKeys(prototype)) {
+      if (property === "constructor" || isHidden(interfaceName, property)) continue;
+
+      const descriptor = Reflect.getOwnPropertyDescriptor(prototype, property);
+      if (descriptor) Object.defineProperty(sanitized, property, descriptor);
+    }
+
+    return sanitized;
   }
 
   function methodFor(target: object, property: PropertyKey, source: AnyFunction): AnyFunction {
