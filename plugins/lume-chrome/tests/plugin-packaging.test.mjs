@@ -54,6 +54,12 @@ test("browser API matrix documents the projected compatibility surface", async (
   assert.match(matrix, /viewport/);
   assert.match(matrix, /pageAssets/);
   assert.match(matrix, /Projected core API/);
+  assert.match(matrix, /Playwright core/);
+  assert.match(matrix, /tab\.playwright/);
+  assert.match(matrix, /locator\(\)/);
+  assert.match(matrix, /waitForEvent/);
+  assert.match(matrix, /file chooser/);
+  assert.match(matrix, /download/);
   assert.match(matrix, /Unavailable Codex capabilities/);
   assert.match(matrix, /browserAuth/);
   assert.match(matrix, /botDetection/);

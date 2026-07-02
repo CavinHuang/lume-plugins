@@ -331,6 +331,13 @@ export class Tab {
   exportContent(options: { format: "text" | "markdown" | "html" | "gsuite" }): Promise<{ assetId: string; path?: string }> {
     return this.t.send(options.format === "gsuite" ? "tab_content_export_gsuite" : "tab_content_export", { context: this.ctx, tabId: this.id, options });
   }
+  markDeliverable(reason?: string): Promise<void> { return this.finalizeAs("deliverable", reason); }
+  markHandoff(reason?: string): Promise<void> { return this.finalizeAs("handoff", reason); }
+  private finalizeAs(status: FinalizeTabKeep["status"], reason?: string): Promise<void> {
+    const keep: FinalizeTabKeep = { tabId: this.id, status };
+    if (reason) keep.reason = reason;
+    return this.t.send("finalize_tabs", { context: this.ctx, keep: [keep] });
+  }
 }
 
 class TabDevAPI {

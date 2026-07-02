@@ -29,8 +29,18 @@ available:
 | --- | --- |
 | `browser` | `browserId`, `capabilities`, `tabs`, `user`, `documentation()`, `nameSession()` |
 | `browser.user` | `openTabs()`, `claimTab()` |
-| `browser.tabs` | `new()`, `get()`, `selected()`, `list()` |
-| `tab` | `id`, `capabilities`, `close()`, `title()`, `url()`, `goto()`, `back()`, `forward()`, `reload()`, `screenshot()` |
+| `browser.tabs` | `new()`, `get()`, `selected()`, `list()`, `finalize()` |
+| `tab` | `id`, `capabilities`, `playwright`, `close()`, `title()`, `url()`, `goto()`, `back()`, `forward()`, `reload()`, `screenshot()`, `markDeliverable()`, `markHandoff()` |
+| `tab.playwright` | `domSnapshot()`, `evaluate()`, `expectNavigation()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()`, `waitForURL()`, `waitForLoadState()`, `waitForTimeout()` |
+| `tab.playwright.locator(...)` | `click()`, `dblclick()`, `fill()`, `press()`, `selectOption()`, `setChecked()`, `check()`, `uncheck()`, `getAttribute()`, `innerText()`, `textContent()`, `inputValue()`, `isVisible()`, `isEnabled()`, `isChecked()`, `count()`, `all()`, `allTextContents()`, `filter()`, `first()`, `last()`, `locator()`, `nth()`, `waitFor()` |
+
+### Playwright core
+
+The projected Playwright core is the conservative subset backed by both the
+client API and the Chrome extension dispatcher. It covers page snapshots,
+read-only evaluation, navigation waits, and basic locator queries/actions.
+`waitForEvent`, `frameLocator`, file chooser upload, and download methods stay
+dynamically hidden until their safety and return-value contracts are conformant.
 
 ### Implemented optional capabilities
 
@@ -46,10 +56,10 @@ has a callable definition for it.
 ## Hidden Surface
 
 These implementation paths are intentionally not part of the current extension
-projection: Playwright, DOM CUA, coordinate CUA, clipboard, dev/CDP, content,
-tab finalization, history, and dialog helpers. They remain dynamically hidden
-until their command parameters, return values, safety policy, and conformance
-tests match the public contract.
+projection: DOM CUA, coordinate CUA, clipboard, dev/CDP, content, history,
+dialog helpers, Playwright event/frame helpers, file chooser upload, and
+download flows. They remain dynamically hidden until their command parameters,
+return values, safety policy, and conformance tests match the public contract.
 
 ### Unavailable Codex capabilities
 
