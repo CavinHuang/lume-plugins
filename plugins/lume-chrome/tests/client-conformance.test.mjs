@@ -9,8 +9,11 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
     type: "extension",
     generation: 7,
     apiSupportOverrides: {
+      "ContentAPI.exportGsuite": false,
       "Tabs.content": false,
       "Tab.getJsDialog": false,
+      "TabClipboardAPI.read": false,
+      "TabClipboardAPI.write": false,
       "PlaywrightAPI.elementInfo": false,
       "PlaywrightAPI.elementScreenshot": false,
       "PlaywrightAPI.frameLocator": false,
@@ -30,6 +33,16 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
   fake.respond("get_tab", { tabId: "42" });
   fake.respond("tab_url", "https://example.com/");
   fake.respond("finalize_tabs", undefined);
+  fake.respond("browser_user_history", [
+    {
+      url: "https://example.com/docs",
+      title: "Docs",
+      lastVisitTime: Date.parse("2026-01-02T03:04:05.000Z"),
+    },
+  ]);
+  fake.respond("tab_content_export", { assetId: "asset-1", path: "C:\\tmp\\page.md" });
+  fake.respond("tab_clipboard_read_text", "clipboard text");
+  fake.respond("tab_clipboard_write_text", undefined);
 
   const globals = {};
   const runtime = await setupBrowserRuntime({
@@ -43,10 +56,43 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
   const browser = await runtime.agent.browsers.getForUrl("https://example.com/");
   assert.equal(browser.browserId, "chrome-1");
   assert.equal(browser.tabs.content, undefined);
+  const history = await browser.user.history({
+    queries: ["lume", "chrome"],
+    from: "2026-01-01T00:00:00.000Z",
+    to: new Date("2026-01-03T00:00:00.000Z"),
+    limit: 5,
+  });
+  assert.deepEqual(history, [
+    {
+      url: "https://example.com/docs",
+      title: "Docs",
+      dateVisited: "2026-01-02T03:04:05.000Z",
+    },
+  ]);
+  const historyCall = fake.calls.find((call) => call.method === "browser_user_history");
+  assert.deepEqual(historyCall.params.options, {
+    text: "lume chrome",
+    maxResults: 5,
+    startTime: Date.parse("2026-01-01T00:00:00.000Z"),
+    endTime: Date.parse("2026-01-03T00:00:00.000Z"),
+  });
   assert.equal(typeof browser.tabs.finalize, "function");
   const tab = await browser.tabs.get("42");
   assert.equal(tab.getJsDialog, undefined);
   assert.equal(await tab.url(), "https://example.com/");
+  assert.equal(typeof tab.content.export, "function");
+  assert.equal(tab.content.exportGsuite, undefined);
+  assert.equal(await tab.content.export(), "C:\\tmp\\page.md");
+  const exportCall = fake.calls.find((call) => call.method === "tab_content_export");
+  assert.deepEqual(exportCall.params.options, { format: "markdown" });
+  assert.equal(tab.clipboard.read, undefined);
+  assert.equal(typeof tab.clipboard.readText, "function");
+  assert.equal(await tab.clipboard.readText(), "clipboard text");
+  assert.equal(tab.clipboard.write, undefined);
+  assert.equal(typeof tab.clipboard.writeText, "function");
+  await tab.clipboard.writeText("new clipboard text");
+  const clipboardWrite = fake.calls.find((call) => call.method === "tab_clipboard_write_text");
+  assert.equal(clipboardWrite.params.text, "new clipboard text");
   assert.equal(typeof tab.markDeliverable, "function");
   assert.equal(typeof tab.markHandoff, "function");
   await tab.markDeliverable("ready for user");

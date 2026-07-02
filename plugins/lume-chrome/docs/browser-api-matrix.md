@@ -28,11 +28,21 @@ available:
 | Object | Effective public members |
 | --- | --- |
 | `browser` | `browserId`, `capabilities`, `tabs`, `user`, `documentation()`, `nameSession()` |
-| `browser.user` | `openTabs()`, `claimTab()` |
+| `browser.user` | `openTabs()`, `claimTab()`, `history()` |
 | `browser.tabs` | `new()`, `get()`, `selected()`, `list()`, `finalize()` |
-| `tab` | `id`, `capabilities`, `playwright`, `close()`, `title()`, `url()`, `goto()`, `back()`, `forward()`, `reload()`, `screenshot()`, `markDeliverable()`, `markHandoff()` |
+| `tab` | `id`, `capabilities`, `clipboard`, `content`, `playwright`, `close()`, `title()`, `url()`, `goto()`, `back()`, `forward()`, `reload()`, `screenshot()`, `markDeliverable()`, `markHandoff()` |
+| `tab.content` | `export()` |
+| `tab.clipboard` | `readText()`, `writeText()` |
 | `tab.playwright` | `domSnapshot()`, `evaluate()`, `expectNavigation()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()`, `waitForURL()`, `waitForLoadState()`, `waitForTimeout()` |
 | `tab.playwright.locator(...)` | `click()`, `dblclick()`, `fill()`, `press()`, `selectOption()`, `setChecked()`, `check()`, `uncheck()`, `getAttribute()`, `innerText()`, `textContent()`, `inputValue()`, `isVisible()`, `isEnabled()`, `isChecked()`, `count()`, `all()`, `allTextContents()`, `filter()`, `first()`, `last()`, `locator()`, `nth()`, `waitFor()` |
+
+### Controller-backed adapters
+
+`browser.user.history()` maps Codex `queries`, `from`, `to`, and `limit` into
+Chrome history search options and returns ISO `dateVisited` values.
+`tab.content.export()` returns a local asset path from the existing content
+export controller. `tab.clipboard.readText()` and `writeText()` expose only the
+plain text clipboard path.
 
 ### Playwright core
 
@@ -56,10 +66,11 @@ has a callable definition for it.
 ## Hidden Surface
 
 These implementation paths are intentionally not part of the current extension
-projection: DOM CUA, coordinate CUA, clipboard, dev/CDP, content, history,
-dialog helpers, Playwright event/frame helpers, file chooser upload, and
-download flows. They remain dynamically hidden until their command parameters,
-return values, safety policy, and conformance tests match the public contract.
+projection: DOM CUA, coordinate CUA, rich clipboard, `exportGsuite()`,
+background `Tabs.content(...)`, dev/CDP, dialog helpers, Playwright event/frame
+helpers, file chooser upload, and download flows. They remain dynamically
+hidden until their command parameters, return values, safety policy, and
+conformance tests match the public contract.
 
 ### Unavailable Codex capabilities
 
