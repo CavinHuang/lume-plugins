@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, type BrowserCapabilities, type BrowserContext, type RpcRequest, type RpcResponse } from "../../shared/protocol";
+import { PROTOCOL_VERSION, type BrowserBackendDescriptor, type BrowserContext, type RpcRequest, type RpcResponse } from "../../shared/protocol";
 import { BrowserRuntimeException, BrowserErrorCodes } from "../../shared/errors";
 import { SessionStore } from "./SessionStore";
 import { TabLeaseManager } from "./TabLeaseManager";
@@ -55,11 +55,11 @@ export class RuntimeDispatcher {
   async ready(){await Promise.all([this.sessions.ready(),this.leases.ready()]);}
   private async context(p:any){const ctx=requireContext(p);await this.sessions.getOrCreate(ctx);return ctx;}
   private async chromeTab(tabId:string,ctx:BrowserContext){return(await this.leases.get(tabId,ctx)).chromeTabId;}
-  private extensionCaps():BrowserCapabilities{return{id:"extension",name:"Lume Chrome",type:"extension",generation:1,metadata:{},capabilities:{browser:[],tab:[]},apiSupportOverrides:{},browserId:"chrome-extension",clientType:"extension",protocolVersion:PROTOCOL_VERSION,permissions:{debugger:"granted",nativeMessaging:"granted",tabs:"granted",tabGroups:"granted",scripting:"granted",history:chrome.history?"optional":"missing",downloads:chrome.downloads?"granted":"missing",bookmarks:chrome.bookmarks?"optional":"missing"},features:{openTabs:"available",claimTab:"available",cdp:"available",cua:"available",dom_cua:"available",playwright:"limited",pageAssets:"available",tabGroups:"available",history:"limited",contentExport:"available",fileChooser:"available",downloads:"available"}};}
+  private extensionCaps():BrowserBackendDescriptor{return{id:"extension",name:"Lume Chrome",type:"extension",protocolVersion:PROTOCOL_VERSION,generation:this.native.connectionGeneration(),metadata:{},capabilities:{browser:[],tab:[]},apiSupportOverrides:{"BrowserUser.history":false,"Tabs.content":false,"Tabs.finalize":false,"Tab.clipboard":false,"Tab.content":false,"Tab.cua":false,"Tab.dev":false,"Tab.dom_cua":false,"Tab.getJsDialog":false,"Tab.markDeliverable":false,"Tab.markHandoff":false,"Tab.playwright":false}};}
   async dispatch(req:RpcRequest):Promise<RpcResponse>{
     try{
       const p:any=req.params??{};
-      if(req.method==="runtime_list_browsers")return ok(req.id,[this.extensionCaps(),{browserId:"in-app",clientType:"iab",protocolVersion:PROTOCOL_VERSION,permissions:{},features:{runtime:"unavailable"}},{browserId:"cdp",clientType:"cdp",protocolVersion:PROTOCOL_VERSION,permissions:{},features:{runtime:"unavailable"}}]);
+      if(req.method==="runtime_list_browsers")return ok(req.id,[this.extensionCaps()]);
       if(req.method==="runtime_ping"){
         if(p.clientType&&p.clientType!=="extension")throw new BrowserRuntimeException("E_BROWSER_UNAVAILABLE",`Browser backend is not available in this extension runtime: ${p.clientType}`);
         return ok(req.id,this.extensionCaps());

@@ -153,7 +153,9 @@ export function createRuntimeView(disabled: Set<string>) {
   return project;
 
   function isHidden(interfaceName: string, property: PropertyKey): boolean {
-    return typeof property === "string" && disabled.has(`${interfaceName}.${property}`);
+    if (typeof property !== "string") return false;
+    const members = API_MEMBERS[interfaceName as keyof typeof API_MEMBERS] as readonly string[];
+    return !members.includes(property) || disabled.has(`${interfaceName}.${property}`);
   }
 }
 

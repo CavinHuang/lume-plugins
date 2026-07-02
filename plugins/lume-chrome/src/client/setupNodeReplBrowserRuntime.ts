@@ -1,10 +1,23 @@
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { BrowserRegistry, type BrowserTransport } from "./BrowserClient";
+import type { BrowserTransport } from "./BrowserClient";
+import { setupBrowserRuntime } from "./setupBrowserRuntime";
 import type { BrowserCommandType, BrowserContext, RpcRequest, RpcResponse } from "../shared/protocol";
 
 type ConfirmationDecision = { approved: boolean; remember?: "session" | "always" | "block" };
 type JsonRecord = Record<string, unknown>;
+
+const DOCUMENT_FILES: Record<string, string> = {
+  "api-use-behavior": "API.md",
+  "browser-safety": "SECURITY_MODEL.md",
+  "browser-troubleshooting": "TROUBLESHOOTING.md",
+  "chrome-troubleshooting": "TROUBLESHOOTING.md",
+  confirmations: "CONFIRMATIONS.md",
+  "file-uploads": "PLAYWRIGHT.md",
+  "tab-claiming-chrome": "API.md",
+  "tab-cleanup-chrome": "API.md",
+};
 
 export interface BrowserAppServerOptions {
   host?: string;
@@ -255,13 +268,25 @@ export async function createBrowserAppServer(options: BrowserAppServerOptions = 
 }
 
 export async function setupNodeReplBrowserRuntime(options: SetupNodeReplBrowserRuntimeOptions = {}) {
+  const globals = options.globals ?? globalThis as unknown as Record<string, unknown>;
   const bridge = await createBrowserAppServer(options);
   const context = options.context ?? createDefaultBrowserContext(options);
-  const agent = { browsers: new BrowserRegistry(bridge.createTransport(), context) };
-  const globals = options.globals ?? globalThis as unknown as Record<string, unknown>;
-  globals.agent = agent;
+  const transport = bridge.createTransport();
+  const browserRuntime = await setupBrowserRuntime({
+    context,
+    globals,
+    transport,
+    readDocument: readPluginDocument,
+  });
+  const agent = browserRuntime.agent;
   globals.lumeBrowser = { bridge, context };
   return { agent, bridge, context };
+}
+
+async function readPluginDocument(name: string): Promise<string> {
+  const file = DOCUMENT_FILES[name];
+  if (!file) throw new Error(`Unknown browser documentation: ${name}`);
+  return await readFile(new URL(`../../docs/${file}`, import.meta.url), "utf8");
 }
 
 function createDefaultBrowserContext(options: SetupNodeReplBrowserRuntimeOptions): BrowserContext {

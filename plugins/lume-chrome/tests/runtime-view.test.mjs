@@ -76,6 +76,22 @@ const PrototypeMethodTab = class Tab {
   }
 };
 
+const InternalSurfaceTab = class Tab extends globalThis.Object {
+  constructor() {
+    super();
+    this.id = "tab-internal";
+    this.internalState = "secret";
+  }
+
+  title() {
+    return "visible";
+  }
+
+  legacyDebug() {
+    return "secret";
+  }
+};
+
 class FileChooser {
   isMultiple() {
     return true;
@@ -104,6 +120,20 @@ test("hidden members disappear from property and reflection APIs", () => {
   assert.equal("markHandoff" in tab, false);
   assert.equal(Reflect.ownKeys(tab).includes("markHandoff"), false);
   assert.equal(Object.getOwnPropertyDescriptor(tab, "markHandoff"), undefined);
+});
+
+test("members outside the public contract are not projected", () => {
+  const project = createRuntimeView(new Set());
+  const tab = project(new InternalSurfaceTab());
+
+  assert.equal(tab.id, "tab-internal");
+  assert.equal(tab.title(), "visible");
+  assert.equal(tab.internalState, undefined);
+  assert.equal(tab.legacyDebug, undefined);
+  assert.equal("internalState" in tab, false);
+  assert.equal("legacyDebug" in tab, false);
+  assert.equal(Reflect.ownKeys(tab).includes("internalState"), false);
+  assert.equal(Object.getPrototypeOf(tab).legacyDebug, undefined);
 });
 
 test("freeze attempts fail without breaking later proxy operations", () => {
