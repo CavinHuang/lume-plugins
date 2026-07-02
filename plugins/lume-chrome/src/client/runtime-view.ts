@@ -107,6 +107,7 @@ export function createRuntimeView(disabled: Set<string>) {
       if (descriptor) Object.defineProperty(sanitized, property, descriptor);
     }
 
+    Object.preventExtensions(sanitized);
     return sanitized;
   }
 

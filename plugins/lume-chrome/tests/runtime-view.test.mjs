@@ -191,6 +191,19 @@ test("setPrototypeOf cannot swap sanitized prototype for raw prototype", () => {
   assert.equal(tabs.get().title(), "title:tab-1");
 });
 
+test("exposed sanitized prototype cannot be relinked to raw prototype", () => {
+  const project = createRuntimeView(new Set(["Tabs.finalize"]));
+  const tabs = project(new PrototypeMethodTabs(new Tab()));
+  const sanitizedPrototype = Object.getPrototypeOf(tabs);
+
+  assert.equal(Reflect.setPrototypeOf(sanitizedPrototype, PrototypeMethodTabs.prototype), false);
+  assert.throws(() => Object.setPrototypeOf(sanitizedPrototype, PrototypeMethodTabs.prototype), TypeError);
+  assert.equal(Object.getPrototypeOf(tabs), sanitizedPrototype);
+  assert.equal(sanitizedPrototype.finalize, undefined);
+  assert.equal(tabs.finalize, undefined);
+  assert.equal(tabs.get().title(), "title:tab-1");
+});
+
 test("known current constructor names map to public contract names", () => {
   const project = createRuntimeView(new Set(["PlaywrightFileChooser.setFiles"]));
   const fileChooser = project(new FileChooser());
