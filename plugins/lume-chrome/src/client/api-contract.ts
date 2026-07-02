@@ -1,7 +1,15 @@
-export type BrowserBackendType = "iab" | "extension" | "cdp";
-export type ApiSupportOverrides = Record<string, boolean>;
+import type { BrowserClientType } from "../shared/protocol";
 
-export const API_MEMBERS = {
+export type BrowserBackendType = BrowserClientType;
+
+function freezeArrayRecord<T extends Record<string, readonly string[]>>(
+  record: T,
+): { readonly [K in keyof T]: Readonly<T[K]> } {
+  for (const members of Object.values(record)) Object.freeze(members);
+  return Object.freeze(record) as { readonly [K in keyof T]: Readonly<T[K]> };
+}
+
+export const API_MEMBERS = freezeArrayRecord({
   Agent: ["browsers", "documentation"],
   Browsers: ["get", "getDefault", "getForUrl", "list"],
   Browser: ["browserId", "capabilities", "tabs", "user", "documentation", "nameSession"],
@@ -39,11 +47,20 @@ export const API_MEMBERS = {
   PromptDialog: ["type", "accept", "dismiss"],
   BrowserDocumentation: ["api", "get", "guidance", "lookupCatalog"],
   Documentation: ["get"],
-} as const;
+} as const);
 
-export const PUBLIC_INTERFACE_NAMES = Object.keys(API_MEMBERS) as Array<keyof typeof API_MEMBERS>;
+type ApiMembers = typeof API_MEMBERS;
+export type PublicInterfaceName = keyof ApiMembers;
+export type QualifiedApiMember = {
+  [K in PublicInterfaceName]: `${K & string}.${ApiMembers[K][number] & string}`;
+}[PublicInterfaceName];
+export type ApiSupportOverrides = Partial<Record<QualifiedApiMember, boolean>>;
 
-export const DEFAULT_UNSUPPORTED_MEMBERS: Record<BrowserBackendType, string[]> = {
+export const PUBLIC_INTERFACE_NAMES = Object.freeze(
+  Object.keys(API_MEMBERS) as PublicInterfaceName[],
+);
+
+export const DEFAULT_UNSUPPORTED_MEMBERS = freezeArrayRecord({
   extension: ["Tabs.content"],
   iab: [
     "BrowserUser.claimTab", "BrowserUser.history", "Tabs.content", "Tabs.finalize",
@@ -54,14 +71,15 @@ export const DEFAULT_UNSUPPORTED_MEMBERS: Record<BrowserBackendType, string[]> =
     "BrowserUser.claimTab", "BrowserUser.history", "Tabs.content", "Tabs.finalize",
     "Tab.markDeliverable", "Tab.markHandoff",
   ],
-};
+} as const satisfies Record<BrowserBackendType, readonly QualifiedApiMember[]>);
 
 export function disabledMembersFor(
   type: BrowserBackendType,
   overrides: ApiSupportOverrides = {},
-): Set<string> {
-  const disabled = new Set(DEFAULT_UNSUPPORTED_MEMBERS[type]);
-  for (const [member, supported] of Object.entries(overrides)) {
+): Set<QualifiedApiMember> {
+  const disabled = new Set<QualifiedApiMember>(DEFAULT_UNSUPPORTED_MEMBERS[type]);
+  for (const member of Object.keys(overrides) as QualifiedApiMember[]) {
+    const supported = overrides[member];
     if (supported) disabled.delete(member);
     else disabled.add(member);
   }

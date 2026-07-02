@@ -61,6 +61,16 @@ const EXPECTED_DEFAULTS = {
   ],
 };
 
+function assertCannotExtend(array, value) {
+  const original = [...array];
+  try {
+    array.push(value);
+  } catch {
+    // Frozen ESM exports throw in strict mode.
+  }
+  assert.deepEqual(array, original);
+}
+
 test("exports the complete canonical public API catalog in interface order", () => {
   assert.deepEqual(API_MEMBERS, EXPECTED_API_MEMBERS);
   assert.deepEqual(PUBLIC_INTERFACE_NAMES, Object.keys(EXPECTED_API_MEMBERS));
@@ -87,4 +97,15 @@ test("excludes non-canonical WebMCP and lumeBrowser surfaces", () => {
   const catalog = JSON.stringify(API_MEMBERS);
   assert.doesNotMatch(catalog, /webmcp/i);
   assert.doesNotMatch(catalog, /lumeBrowser/i);
+});
+
+test("prevents consumers from extending canonical contract arrays", () => {
+  assertCannotExtend(PUBLIC_INTERFACE_NAMES, "NotARealInterface");
+  assertCannotExtend(API_MEMBERS.Agent, "notARealMember");
+  assertCannotExtend(DEFAULT_UNSUPPORTED_MEMBERS.extension, "Tabs.finalize");
+});
+
+test("mutation attempts do not affect extension disabled members", () => {
+  assertCannotExtend(DEFAULT_UNSUPPORTED_MEMBERS.extension, "Tabs.finalize");
+  assert.deepEqual([...disabledMembersFor("extension")], ["Tabs.content"]);
 });
