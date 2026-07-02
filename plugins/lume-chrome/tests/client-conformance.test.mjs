@@ -9,15 +9,11 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
     type: "extension",
     generation: 7,
     apiSupportOverrides: {
-      "ContentAPI.exportGsuite": false,
       "CUAAPI.downloadMedia": false,
       "Tabs.content": false,
-      "Tab.getJsDialog": false,
       "Tab.dom_cua": false,
       "TabClipboardAPI.read": false,
       "TabClipboardAPI.write": false,
-      "PlaywrightAPI.elementInfo": false,
-      "PlaywrightAPI.elementScreenshot": false,
       "PlaywrightAPI.frameLocator": false,
       "PlaywrightAPI.waitForEvent": false,
       "PlaywrightDownload.path": false,
@@ -40,10 +36,23 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
     },
   ]);
   fake.respond("tab_content_export", { assetId: "asset-1", path: "C:\\tmp\\page.md" });
+  fake.respond("tab_content_export_gsuite", { assetId: "asset-gsuite", path: "C:\\tmp\\sheet.xlsx" });
+  fake.respond("tab_js_dialog_get", { type: "confirm", message: "Continue?" });
+  fake.respond("tab_js_dialog_handle", undefined);
   fake.respond("tab_clipboard_read_text", "clipboard text");
   fake.respond("tab_clipboard_write_text", undefined);
   fake.respond("cua_move", undefined);
   fake.respond("cua_click", undefined);
+  fake.respond("playwright_element_info", [
+    {
+      tagName: "BUTTON",
+      role: "button",
+      visibleText: "Save",
+      selector: { primary: "button", candidates: ["button"] },
+      boundingBox: { x: 10, y: 20, width: 80, height: 30 },
+    },
+  ]);
+  fake.respond("playwright_element_screenshot", { dataBase64: Buffer.from("png").toString("base64") });
   fake.respond("playwright_locator_type", undefined);
 
   const globals = {};
@@ -80,10 +89,36 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
   });
   assert.equal(typeof browser.tabs.finalize, "function");
   const tab = await browser.tabs.get("42");
-  assert.equal(tab.getJsDialog, undefined);
+  assert.equal(typeof tab.getJsDialog, "function");
+  const dialog = await tab.getJsDialog();
+  assert.equal(dialog.type, "confirm");
+  await dialog.accept();
+  await dialog.dismiss();
+  assert.deepEqual(
+    fake.calls
+      .filter((call) => call.method === "tab_js_dialog_handle")
+      .map((call) => call.params),
+    [
+      {
+        context: { browserSessionId: "browser-runtime", browserTurnId: "browser-runtime", actor: "agent" },
+        browserId: "chrome-1",
+        tabId: "42",
+        accept: true,
+      },
+      {
+        context: { browserSessionId: "browser-runtime", browserTurnId: "browser-runtime", actor: "agent" },
+        browserId: "chrome-1",
+        tabId: "42",
+        accept: false,
+      },
+    ],
+  );
   assert.equal(await tab.url(), "https://example.com/");
   assert.equal(typeof tab.content.export, "function");
-  assert.equal(tab.content.exportGsuite, undefined);
+  assert.equal(typeof tab.content.exportGsuite, "function");
+  assert.equal(await tab.content.exportGsuite("xlsx"), "C:\\tmp\\sheet.xlsx");
+  const gsuiteCall = fake.calls.find((call) => call.method === "tab_content_export_gsuite");
+  assert.equal(gsuiteCall.params.type, "xlsx");
   assert.equal(await tab.content.export(), "C:\\tmp\\page.md");
   const exportCall = fake.calls.find((call) => call.method === "tab_content_export");
   assert.deepEqual(exportCall.params.options, { format: "markdown" });
@@ -126,8 +161,18 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
   assert.equal(typeof tab.playwright.waitForURL, "function");
   assert.equal(typeof tab.playwright.waitForLoadState, "function");
   assert.equal(typeof tab.playwright.waitForTimeout, "function");
-  assert.equal(tab.playwright.elementInfo, undefined);
-  assert.equal(tab.playwright.elementScreenshot, undefined);
+  assert.equal(typeof tab.playwright.elementInfo, "function");
+  assert.deepEqual(await tab.playwright.elementInfo({ x: 10, y: 20 }), [
+    {
+      tagName: "BUTTON",
+      role: "button",
+      visibleText: "Save",
+      selector: { primary: "button", candidates: ["button"] },
+      boundingBox: { x: 10, y: 20, width: 80, height: 30 },
+    },
+  ]);
+  assert.equal(typeof tab.playwright.elementScreenshot, "function");
+  assert.deepEqual([...await tab.playwright.elementScreenshot({ x: 10, y: 20 })], [...Buffer.from("png")]);
   assert.equal(tab.playwright.frameLocator, undefined);
   assert.equal(tab.playwright.waitForEvent, undefined);
   const locator = tab.playwright.locator("button");
