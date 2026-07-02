@@ -92,6 +92,7 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
   assert.equal(typeof tab.getJsDialog, "function");
   const dialog = await tab.getJsDialog();
   assert.equal(dialog.type, "confirm");
+  assert.equal(dialog.message, "Continue?");
   await dialog.accept();
   await dialog.dismiss();
   assert.deepEqual(
@@ -171,8 +172,12 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
       boundingBox: { x: 10, y: 20, width: 80, height: 30 },
     },
   ]);
+  const elementInfoCall = fake.calls.find((call) => call.method === "playwright_element_info");
+  assert.deepEqual(elementInfoCall.params.options, { x: 10, y: 20 });
   assert.equal(typeof tab.playwright.elementScreenshot, "function");
   assert.deepEqual([...await tab.playwright.elementScreenshot({ x: 10, y: 20 })], [...Buffer.from("png")]);
+  const elementScreenshotCall = fake.calls.find((call) => call.method === "playwright_element_screenshot");
+  assert.deepEqual(elementScreenshotCall.params.options, { x: 10, y: 20 });
   assert.equal(tab.playwright.frameLocator, undefined);
   assert.equal(tab.playwright.waitForEvent, undefined);
   const locator = tab.playwright.locator("button");
