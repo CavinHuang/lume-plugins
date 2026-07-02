@@ -49,6 +49,15 @@ test("browser API matrix documents the projected compatibility surface", async (
   assert.match(matrix, /dynamically hidden/);
   assert.match(matrix, /agent\.browsers\.getForUrl/);
   assert.match(matrix, /agent\.browsers\.getDefault/);
+  assert.match(matrix, /Implemented optional capabilities/);
+  assert.match(matrix, /visibility/);
+  assert.match(matrix, /viewport/);
+  assert.match(matrix, /pageAssets/);
+  assert.match(matrix, /Projected core API/);
+  assert.match(matrix, /Unavailable Codex capabilities/);
+  assert.match(matrix, /browserAuth/);
+  assert.match(matrix, /botDetection/);
+  assert.match(matrix, /cdp/);
   assert.doesNotMatch(matrix, /lumeBrowser\.control/);
   assert.doesNotMatch(matrix, /webmcp.*implemented/i);
 });

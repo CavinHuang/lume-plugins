@@ -23,6 +23,8 @@ The extension descriptor currently exposes the contract members that have
 passed this phase's conformance boundary. The following object paths are
 available:
 
+### Projected core API
+
 | Object | Effective public members |
 | --- | --- |
 | `browser` | `browserId`, `capabilities`, `tabs`, `user`, `documentation()`, `nameSession()` |
@@ -30,9 +32,16 @@ available:
 | `browser.tabs` | `new()`, `get()`, `selected()`, `list()` |
 | `tab` | `id`, `capabilities`, `close()`, `title()`, `url()`, `goto()`, `back()`, `forward()`, `reload()`, `screenshot()` |
 
-The extension currently advertises no optional capability objects. A capability
-can be obtained only when the backend advertises it and the client has a
-callable definition for it.
+### Implemented optional capabilities
+
+| Capability | Scope | Public API |
+| --- | --- | --- |
+| `visibility` | browser | `await browser.capabilities.get("visibility")` |
+| `viewport` | browser | `await browser.capabilities.get("viewport")` |
+| `pageAssets` | tab | `await tab.capabilities.get("pageAssets")` |
+
+A capability can be obtained only when the backend advertises it and the client
+has a callable definition for it.
 
 ## Hidden Surface
 
@@ -41,6 +50,14 @@ projection: Playwright, DOM CUA, coordinate CUA, clipboard, dev/CDP, content,
 tab finalization, history, and dialog helpers. They remain dynamically hidden
 until their command parameters, return values, safety policy, and conformance
 tests match the public contract.
+
+### Unavailable Codex capabilities
+
+| Capability | Status | Reason |
+| --- | --- | --- |
+| `browserAuth` | unavailable | Secure credential handoff needs a separate Lume interruption flow. |
+| `botDetection` | unavailable | Reporting storage and host policy are not implemented. |
+| `cdp` | unavailable | The Codex capability object (`send`, `readEvents`) is not conformant yet. |
 
 The temporary Node REPL WebSocket bootstrap is an implementation detail, not an
 Agent API. Direct bridge state and helper facades must not be used by skills.

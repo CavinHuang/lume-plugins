@@ -55,7 +55,7 @@ export class RuntimeDispatcher {
   async ready(){await Promise.all([this.sessions.ready(),this.leases.ready()]);}
   private async context(p:any){const ctx=requireContext(p);await this.sessions.getOrCreate(ctx);return ctx;}
   private async chromeTab(tabId:string,ctx:BrowserContext){return(await this.leases.get(tabId,ctx)).chromeTabId;}
-  private extensionCaps():BrowserBackendDescriptor{return{id:"extension",name:"Lume Chrome",type:"extension",protocolVersion:PROTOCOL_VERSION,generation:this.native.connectionGeneration(),metadata:{},capabilities:{browser:[],tab:[]},apiSupportOverrides:{"BrowserUser.history":false,"Tabs.content":false,"Tabs.finalize":false,"Tab.clipboard":false,"Tab.content":false,"Tab.cua":false,"Tab.dev":false,"Tab.dom_cua":false,"Tab.getJsDialog":false,"Tab.markDeliverable":false,"Tab.markHandoff":false,"Tab.playwright":false}};}
+  private extensionCaps():BrowserBackendDescriptor{return{id:"extension",name:"Lume Chrome",type:"extension",protocolVersion:PROTOCOL_VERSION,generation:this.native.connectionGeneration(),metadata:{},capabilities:{browser:[{id:"visibility",description:"Show or hide the browser window."},{id:"viewport",description:"Set or reset the browser viewport."}],tab:[{id:"pageAssets",description:"Inventory and bundle rendered page assets."}]},apiSupportOverrides:{"BrowserUser.history":false,"Tabs.content":false,"Tabs.finalize":false,"Tab.clipboard":false,"Tab.content":false,"Tab.cua":false,"Tab.dev":false,"Tab.dom_cua":false,"Tab.getJsDialog":false,"Tab.markDeliverable":false,"Tab.markHandoff":false,"Tab.playwright":false}};}
   async dispatch(req:RpcRequest):Promise<RpcResponse>{
     try{
       const p:any=req.params??{};
@@ -81,8 +81,8 @@ export class RuntimeDispatcher {
         case"browser_user_open_tabs":return ok(req.id,await this.leases.openUserTabs());
         case"browser_user_claim_tab":{const chromeTabId=Number(String(p.tabId).replace("chrome-tab:",""));const lease=await this.leases.claimExisting(chromeTabId,ctx!);await this.groups.ensureGroup(ctx!,chromeTabId,"Lume");await injectScript(chromeTabId,"dist/extension/content/overlay.js").catch(()=>undefined);return ok(req.id,{tabId:lease.tabId});}
         case"browser_user_history":await this.confirmations.ensureAllowed({kind:"history",description:"Read recent Chrome browsing history",source:"agent"},ctx!);return ok(req.id,await this.userData.history(p.options??{}));
-        case"browser_visibility_get":return ok(req.id,await this.visibility.get());
-        case"browser_visibility_set":return ok(req.id,await this.visibility.set(p.visibility));
+        case"browser_visibility_get":return ok(req.id,(await this.visibility.get()).visibility==="visible");
+        case"browser_visibility_set":return ok(req.id,await this.visibility.set(typeof p.visible==="boolean"?(p.visible?"visible":"hidden"):p.visibility));
         case"create_tab":{const tab=await chrome.tabs.create({url:p.options?.url,active:p.options?.active??true});const lease=await this.leases.createLease(tab.id!,ctx!,true);if(p.options?.grouped!==false)await this.groups.ensureGroup(ctx!,tab.id!,"Lume");return ok(req.id,{tabId:lease.tabId});}
         case"get_tab":await this.leases.get(p.tabId,ctx!);return ok(req.id,{tabId:p.tabId});
         case"selected_tab":{const[tab]=await chrome.tabs.query({active:true,currentWindow:true});if(!tab?.id)return ok(req.id,{});const lease=await this.leases.claimExisting(tab.id,ctx!);return ok(req.id,{tabId:lease.tabId});}
