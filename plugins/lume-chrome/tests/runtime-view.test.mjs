@@ -103,6 +103,18 @@ test("freeze attempts fail without breaking later proxy operations", () => {
   assert.equal(tab.title(), "title:tab-1");
 });
 
+test("defineProperty attempts fail without mutating the proxy target", () => {
+  const project = createRuntimeView(new Set(["Tab.markHandoff"]));
+  const tab = project(new Tab());
+
+  assert.throws(() => {
+    Object.defineProperty(tab, "extra", { configurable: false, value: 1 });
+  }, TypeError);
+  assert.deepEqual(Reflect.ownKeys(tab), ["id"]);
+  assert.equal(tab.markHandoff, undefined);
+  assert.equal(tab.title(), "title:tab-1");
+});
+
 test("hidden non-configurable own members do not violate proxy invariants", () => {
   const project = createRuntimeView(new Set(["Tab.markHandoff"]));
   const raw = new Tab();

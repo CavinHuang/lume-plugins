@@ -61,6 +61,10 @@ export function createRuntimeView(disabled: Set<string>) {
         return { ...descriptor, configurable: true, value: project(descriptor.value) };
       },
 
+      defineProperty() {
+        return false;
+      },
+
       preventExtensions() {
         return false;
       },
