@@ -3,6 +3,13 @@ import { API_MEMBERS } from "./api-contract";
 type AnyFunction = (...args: unknown[]) => unknown;
 type CachedMethod = { source: AnyFunction; wrapper: AnyFunction };
 
+const CONSTRUCTOR_NAME_ALIASES: Record<string, string> = {
+  ClipboardAPI: "TabClipboardAPI",
+  Download: "PlaywrightDownload",
+  FileChooser: "PlaywrightFileChooser",
+  Locator: "PlaywrightLocator",
+};
+
 export function createRuntimeView(disabled: Set<string>) {
   const rawToProxy = new WeakMap<object, object>();
   const proxyToRaw = new WeakMap<object, object>();
@@ -51,6 +58,10 @@ export function createRuntimeView(disabled: Set<string>) {
         if (!descriptor) return undefined;
         if (!("value" in descriptor)) return { ...descriptor, configurable: true };
         return { ...descriptor, configurable: true, value: project(descriptor.value) };
+      },
+
+      preventExtensions() {
+        return false;
       },
     });
 
@@ -136,7 +147,10 @@ export function createRuntimeView(disabled: Set<string>) {
 }
 
 function getInterfaceName(value: object): string | null {
-  const name = value.constructor?.name;
+  const constructorName = value.constructor?.name;
+  const name = typeof constructorName === "string"
+    ? CONSTRUCTOR_NAME_ALIASES[constructorName] ?? constructorName
+    : null;
   return typeof name === "string" && Object.prototype.hasOwnProperty.call(API_MEMBERS, name)
     ? name
     : null;

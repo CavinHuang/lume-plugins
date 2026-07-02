@@ -62,6 +62,16 @@ const PrototypeMethodTab = class Tab {
   }
 };
 
+class FileChooser {
+  isMultiple() {
+    return true;
+  }
+
+  setFiles() {
+    return "hidden";
+  }
+}
+
 test("hidden members disappear from property and reflection APIs", () => {
   const project = createRuntimeView(new Set(["Tab.markHandoff"]));
   const tab = project(new Tab());
@@ -70,6 +80,17 @@ test("hidden members disappear from property and reflection APIs", () => {
   assert.equal("markHandoff" in tab, false);
   assert.equal(Reflect.ownKeys(tab).includes("markHandoff"), false);
   assert.equal(Object.getOwnPropertyDescriptor(tab, "markHandoff"), undefined);
+});
+
+test("freeze attempts fail without breaking later proxy operations", () => {
+  const project = createRuntimeView(new Set(["Tab.markHandoff"]));
+  const tab = project(new Tab());
+
+  assert.throws(() => Object.freeze(tab), TypeError);
+  assert.throws(() => Object.preventExtensions(tab), TypeError);
+  assert.equal(tab.markHandoff, undefined);
+  assert.deepEqual(Reflect.ownKeys(tab), ["id"]);
+  assert.equal(tab.title(), "title:tab-1");
 });
 
 test("hidden non-configurable own members do not violate proxy invariants", () => {
@@ -96,6 +117,16 @@ test("hidden prototype methods do not leak through the proxy prototype", () => {
   assert.equal("markHandoff" in tab, false);
   assert.equal(Object.getPrototypeOf(tab).markHandoff, undefined);
   assert.equal(tab.title(), "title:tab-1");
+});
+
+test("known current constructor names map to public contract names", () => {
+  const project = createRuntimeView(new Set(["PlaywrightFileChooser.setFiles"]));
+  const fileChooser = project(new FileChooser());
+
+  assert.equal(fileChooser.setFiles, undefined);
+  assert.equal("setFiles" in fileChooser, false);
+  assert.equal(Object.getPrototypeOf(fileChooser).setFiles, undefined);
+  assert.equal(fileChooser.isMultiple(), true);
 });
 
 test("visible methods still work and repeated reads are stable", () => {
