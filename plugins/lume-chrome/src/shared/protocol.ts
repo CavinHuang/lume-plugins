@@ -69,17 +69,12 @@ export interface BrowserBackendDescriptor {
   apiSupportOverrides: Record<string, boolean>;
 }
 
-export interface LegacyBrowserCapabilities {
-  clientType: BrowserClientType;
+export interface BrowserCapabilities extends BrowserBackendDescriptor {
   browserId: string;
-  protocolVersion: number;
+  clientType: BrowserClientType;
   permissions: Record<string, PermissionState>;
   features: Record<string, FeatureState>;
 }
-
-export interface BrowserDescriptorCapabilities extends BrowserBackendDescriptor, LegacyBrowserCapabilities {}
-
-export type BrowserCapabilities = BrowserDescriptorCapabilities | LegacyBrowserCapabilities;
 
 export interface FinalizeTabKeep { tabId: string; status: FinalizeTabStatus; reason?: string; }
 export interface UserTabInfo { id: string; chromeTabId: number; title?: string; url?: string; lastOpened?: string; tabGroup?: string; active?: boolean; windowId?: number; faviconUrl?: string; }
