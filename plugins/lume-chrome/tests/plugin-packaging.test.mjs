@@ -31,8 +31,24 @@ test("browser skill starts through Lume node_repl MCP", async () => {
 
   assert.match(skill, /^name:\s*lume-chrome$/m);
   assert.match(skill, /mcp__node_repl__js/);
-  assert.match(skill, /setupNodeReplBrowserRuntime/);
+  assert.match(skill, /setupBrowserRuntime|setupNodeReplBrowserRuntime/);
+  assert.match(skill, /agent\.browsers\.getForUrl/);
+  assert.match(skill, /agent\.browsers\.getDefault/);
+  assert.match(skill, /browser\.documentation\(\)/);
+  assert.doesNotMatch(skill, /lumeBrowser\.control/);
+  assert.doesNotMatch(skill, /browserControl|lumeBrowserControl/);
   assert.doesNotMatch(skill, /D:\\\\workspace/);
   assert.doesNotMatch(skill, /@lume\/browser-client/);
   assert.doesNotMatch(skill, /setupBrowserRuntime\(\{ transport, context \}\)/);
+});
+
+test("browser API matrix documents the projected compatibility surface", async () => {
+  const matrix = await readText(join("docs", "browser-api-matrix.md"));
+
+  assert.match(matrix, /Codex-compatible public contract/);
+  assert.match(matrix, /dynamically hidden/);
+  assert.match(matrix, /agent\.browsers\.getForUrl/);
+  assert.match(matrix, /agent\.browsers\.getDefault/);
+  assert.doesNotMatch(matrix, /lumeBrowser\.control/);
+  assert.doesNotMatch(matrix, /webmcp.*implemented/i);
 });
