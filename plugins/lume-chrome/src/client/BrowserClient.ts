@@ -4,9 +4,16 @@ import type {
   SessionTabInfo, SitePermissionRecord, UserTabInfo, VisibleDomNode
 } from "../shared/protocol";
 import { appendLocator, locatorAst, type LocatorAst, type LocatorStep, type TextMatcher } from "../shared/locator";
+import { disabledMembersFor, type ApiSupportOverrides } from "./api-contract";
 import { CapabilityCollection, createCapabilityDefinitions } from "./capabilities";
+import {
+  BrowserDocumentation,
+  formatApiReference,
+  type ReadDocument,
+} from "./documentation";
 
 const CAPABILITY_DEFINITIONS = createCapabilityDefinitions();
+const EMPTY_DOCUMENT_READER: ReadDocument = async () => "";
 
 export interface BrowserTransport {
   send<T = unknown>(method: BrowserCommandType, params: unknown): Promise<T>;
@@ -31,10 +38,25 @@ export class JsonRpcTransport implements BrowserTransport {
 }
 
 export class BrowserRegistry {
-  constructor(private readonly transport: BrowserTransport, private readonly context: BrowserContext) {}
+  constructor(
+    private readonly transport: BrowserTransport,
+    private readonly context: BrowserContext,
+    private readonly readDocument: ReadDocument = EMPTY_DOCUMENT_READER,
+  ) {}
   async get(id: "extension" | "iab" | "cdp" | string = "extension"): Promise<Browser> {
     const caps = await this.transport.send<BrowserCapabilities>("runtime_ping", { clientType: id, context: this.context });
-    return new Browser(this.transport, this.context, caps);
+    const disabledMembers = disabledMembersFor(
+      caps.type,
+      caps.apiSupportOverrides as ApiSupportOverrides,
+    );
+    const documentation = new BrowserDocumentation({
+      api: async () => formatApiReference(disabledMembers),
+      browserType: caps.type,
+      capabilities: caps.capabilities,
+      disabledMembers,
+      read: this.readDocument,
+    });
+    return new Browser(this.transport, this.context, caps, documentation);
   }
   list(): Promise<BrowserCapabilities[]> {
     return this.transport.send("runtime_list_browsers", { context: this.context });
@@ -49,7 +71,12 @@ export class Browser {
   readonly user: BrowserUser;
   readonly tabs: Tabs;
   readonly capabilities: CapabilityCollection;
-  constructor(private readonly t: BrowserTransport, private readonly ctx: BrowserContext, public readonly info: BrowserCapabilities) {
+  constructor(
+    private readonly t: BrowserTransport,
+    private readonly ctx: BrowserContext,
+    public readonly info: BrowserCapabilities,
+    private readonly docs: BrowserDocumentation,
+  ) {
     this.browserId = info.browserId;
     this.user = new BrowserUser(t, ctx, info);
     this.tabs = new Tabs(t, ctx, info);
@@ -61,7 +88,13 @@ export class Browser {
       transport: t,
     });
   }
-  documentation(): Promise<string> { return this.t.send("browser_documentation", { context: this.ctx }); }
+  async documentation(): Promise<string> {
+    const [guidance, api] = await Promise.all([this.docs.guidance(), this.docs.api()]);
+    return [guidance, api, this.docs.lookupCatalog()]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join("\n\n");
+  }
   nameSession(name: string): Promise<void> { return this.t.send("browser_name_session", { context: this.ctx, name }); }
   sitePermissions = {
     list: () => this.t.send<SitePermissionRecord[]>("browser_site_permissions_list", { context: this.ctx }),
