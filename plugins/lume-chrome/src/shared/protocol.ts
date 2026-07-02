@@ -1,6 +1,6 @@
 import type { LocatorAst } from "./locator";
 
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 export const NATIVE_HOST_PROTOCOL_VERSION = 4;
 export const APP_SERVER_PROTOCOL_VERSION = 1;
 export const NATIVE_HOST_NAME = "com.lume.browser";
@@ -50,9 +50,27 @@ export interface BrowserRuntimeError { code: string; message: string; details?: 
 export interface BrowserContext { browserSessionId: string; browserTurnId: string; actor: "agent" | "user"; threadId?: string; }
 export interface CapabilityInfo { id: string; name: string; scope: "browser" | "tab"; description: string; state: FeatureState; }
 
-export interface BrowserCapabilities {
-  clientType: BrowserClientType;
+export interface AdvertisedCapability {
+  id: string;
+  description: string;
+}
+
+export interface BrowserBackendDescriptor {
+  id?: string;
+  name?: string;
+  type?: BrowserClientType;
   protocolVersion: number;
+  generation?: string;
+  metadata?: Record<string, string>;
+  capabilities?: {
+    browser: AdvertisedCapability[];
+    tab: AdvertisedCapability[];
+  };
+  apiSupportOverrides?: Record<string, boolean>;
+}
+
+export interface BrowserCapabilities extends BrowserBackendDescriptor {
+  clientType: BrowserClientType;
   browserId: string;
   permissions: Record<string, PermissionState>;
   features: Record<string, FeatureState>;
