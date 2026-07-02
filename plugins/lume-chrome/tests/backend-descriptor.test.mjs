@@ -8,12 +8,10 @@ test("fake iab backend advertises a versioned descriptor and records calls", asy
   const backend = createFakeBackend({
     id: "local-iab",
     type: "iab",
-    generation: "test-generation",
+    generation: 3,
     metadata: { channel: "test" },
-    capabilities: {
-      browser: [{ id: "browser.openTabs", description: "List open tabs" }],
-      tab: [{ id: "tab.screenshot", description: "Capture screenshots" }],
-    },
+    browserCapabilities: [{ id: "browser.openTabs", description: "List open tabs" }],
+    tabCapabilities: [{ id: "tab.screenshot", description: "Capture screenshots" }],
     apiSupportOverrides: { "Tabs.finalize": false },
   });
 
@@ -29,7 +27,7 @@ test("fake iab backend advertises a versioned descriptor and records calls", asy
       name: "Lume Local Browser",
       type: "iab",
       protocolVersion: 5,
-      generation: "test-generation",
+      generation: 3,
       metadata: { channel: "test" },
       capabilities: {
         browser: [{ id: "browser.openTabs", description: "List open tabs" }],
@@ -45,6 +43,7 @@ test("fake extension backend uses the Chrome default name", () => {
 
   assert.equal(backend.descriptor.name, "Lume Chrome");
   assert.equal(backend.descriptor.type, "extension");
+  assert.equal(backend.descriptor.generation, 1);
 });
 
 test("fake backend returns configured responses as clones", async () => {

@@ -15,11 +15,11 @@ export function createFakeBackend(options = {}) {
     name: options.name ?? DEFAULT_NAMES[type] ?? "Lume Browser",
     type,
     protocolVersion: 5,
-    generation: options.generation ?? "fake",
+    generation: options.generation ?? 1,
     metadata: options.metadata ?? {},
     capabilities: {
-      browser: options.capabilities?.browser ?? [],
-      tab: options.capabilities?.tab ?? [],
+      browser: options.browserCapabilities ?? [],
+      tab: options.tabCapabilities ?? [],
     },
     apiSupportOverrides: options.apiSupportOverrides ?? {},
   };
