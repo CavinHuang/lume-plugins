@@ -57,7 +57,7 @@ export class RuntimeDispatcher {
     async context(p) { const ctx = requireContext(p); await this.sessions.getOrCreate(ctx); return ctx; }
     async chromeTab(tabId, ctx) { return (await this.leases.get(tabId, ctx)).chromeTabId; }
     async showCursor(chromeTabId, x, y) { await injectScript(chromeTabId, "dist/extension/content/overlay.js").catch(() => undefined); await chrome.tabs.sendMessage(chromeTabId, { type: "LUME_CURSOR_MOVE", x, y }).catch(() => undefined); }
-    extensionCaps() { return { id: "chrome-extension", browserId: "chrome-extension", name: "Lume Chrome", type: "extension", clientType: "extension", protocolVersion: PROTOCOL_VERSION, generation: this.native.connectionGeneration(), metadata: {}, capabilities: { browser: [{ id: "visibility", description: "Show or hide the browser window." }, { id: "viewport", description: "Set or reset the browser viewport." }], tab: [{ id: "pageAssets", description: "Inventory and bundle rendered page assets." }] }, apiSupportOverrides: { "Tabs.content": false, "Tab.content": false, "Tab.getJsDialog": false, "Tab.markDeliverable": false, "Tab.markHandoff": false, "ContentAPI.export": false, "ContentAPI.exportGsuite": false }, permissions: { debugger: "granted", nativeMessaging: "granted", tabs: "granted", tabGroups: "granted", scripting: "granted", history: chrome.history ? "optional" : "missing", downloads: chrome.downloads ? "granted" : "missing", bookmarks: chrome.bookmarks ? "optional" : "missing" }, features: { openTabs: "available", claimTab: "available", cdp: "available", cua: "available", dom_cua: "available", playwright: "limited", pageAssets: "available", tabGroups: "available", history: "limited", contentExport: "available", fileChooser: "available", downloads: "available" } }; }
+    extensionCaps() { return { id: "chrome-extension", browserId: "chrome-extension", name: "Lume Chrome", type: "extension", clientType: "extension", protocolVersion: PROTOCOL_VERSION, generation: this.native.connectionGeneration(), metadata: {}, capabilities: { browser: [{ id: "visibility", description: "Show or hide the browser window." }, { id: "viewport", description: "Set or reset the browser viewport." }], tab: [{ id: "pageAssets", description: "Inventory and bundle rendered page assets." }, { id: "cdp", description: "Read buffered CDP events and send permitted CDP commands." }, { id: "botDetection", description: "Report bot detection or access-control blockers for this tab." }] }, apiSupportOverrides: { "Tabs.content": false, "Tab.content": false }, permissions: { debugger: "granted", nativeMessaging: "granted", tabs: "granted", tabGroups: "granted", scripting: "granted", history: chrome.history ? "optional" : "missing", downloads: chrome.downloads ? "granted" : "missing", bookmarks: chrome.bookmarks ? "optional" : "missing" }, features: { openTabs: "available", claimTab: "available", cdp: "available", cua: "available", dom_cua: "available", playwright: "limited", pageAssets: "available", tabGroups: "available", history: "limited", contentExport: "available", fileChooser: "available", downloads: "available" } }; }
     async dispatch(req) {
         try {
             const p = req.params ?? {};
@@ -149,6 +149,10 @@ export class RuntimeDispatcher {
                 }
                 case "tab_title": return ok(req.id, (await chrome.tabs.get(await this.chromeTab(p.tabId, ctx))).title);
                 case "tab_url": return ok(req.id, (await chrome.tabs.get(await this.chromeTab(p.tabId, ctx))).url);
+                case "tab_js_dialog_get": return ok(req.id, this.cdp.getDialog(await this.chromeTab(p.tabId, ctx)));
+                case "tab_js_dialog_handle":
+                    await this.cdp.handleDialog(await this.chromeTab(p.tabId, ctx), { accept: p.accept === true, promptText: p.promptText });
+                    return ok(req.id, undefined);
                 case "navigate_tab_url": {
                     await this.confirmations.ensureAllowed({ kind: "navigate", url: p.url, source: "agent", description: `Navigate to ${p.url}` }, ctx);
                     const id = await this.chromeTab(p.tabId, ctx);
@@ -168,6 +172,23 @@ export class RuntimeDispatcher {
                     return ok(req.id, undefined);
                 case "tab_screenshot": return ok(req.id, await this.cdp.screenshot(await this.chromeTab(p.tabId, ctx), p.options ?? {}));
                 case "tab_cdp_call": return ok(req.id, await this.cdp.send(await this.chromeTab(p.tabId, ctx), p.method, p.params ?? {}, { allowMutating: p.allowMutating === true }));
+                case "tab_cdp_send": return ok(req.id, await this.cdp.sendRaw(await this.chromeTab(p.tabId, ctx), p.method, p.params ?? {}, p.options ?? {}));
+                case "tab_cdp_read_events": return ok(req.id, await this.cdp.readEvents(await this.chromeTab(p.tabId, ctx), p.options ?? {}));
+                case "tab_bot_detection_report": {
+                    const reasons = ["captcha_failed", "access_denied", "challenge_loop", "unexpected_bot_error"];
+                    if (!reasons.includes(p.reason))
+                        throw new Error(`Invalid bot detection reason: ${String(p.reason)}`);
+                    const tab = await chrome.tabs.get(await this.chromeTab(p.tabId, ctx));
+                    let hostname = null;
+                    try {
+                        hostname = tab.url ? new URL(tab.url).hostname : null;
+                    }
+                    catch {
+                        hostname = null;
+                    }
+                    this.native.notifyHost("browser.botDetection.report", { context: ctx, tabId: p.tabId, hostname, reason: p.reason });
+                    return ok(req.id, { hostname, status: "reported" });
+                }
                 case "tab_cdp_events":
                     await this.cdpEvents.subscribe(await this.chromeTab(p.tabId, ctx), p.events ?? []);
                     return ok(req.id, undefined);
@@ -237,8 +258,8 @@ export class RuntimeDispatcher {
                     return ok(req.id, undefined);
                 case "playwright_dom_snapshot": return ok(req.id, await this.pw.domSnapshot(await this.chromeTab(p.tabId, ctx)));
                 case "playwright_evaluate": return ok(req.id, await this.pw.evaluate(await this.chromeTab(p.tabId, ctx), p.expression, p.arg));
-                case "playwright_element_info": return ok(req.id, await this.pw.operation(await this.chromeTab(p.tabId, ctx), p.locator, "elementInfo", p));
-                case "playwright_element_screenshot": return ok(req.id, await this.pw.elementScreenshot(await this.chromeTab(p.tabId, ctx), p.locator, p.options ?? {}));
+                case "playwright_element_info": return ok(req.id, await this.pw.elementInfoAtPoint(await this.chromeTab(p.tabId, ctx), p.options ?? p));
+                case "playwright_element_screenshot": return ok(req.id, await this.pw.elementScreenshotAtPoint(await this.chromeTab(p.tabId, ctx), p.options ?? p));
                 case "playwright_wait_for_url":
                     await this.pw.waitForURL(await this.chromeTab(p.tabId, ctx), p.url, p.options?.timeoutMs ?? 10_000);
                     return ok(req.id, undefined);

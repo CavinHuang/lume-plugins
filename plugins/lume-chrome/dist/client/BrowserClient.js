@@ -308,6 +308,13 @@ export class Tab {
     back() { return this.t.send("navigate_tab_back", { context: this.ctx, tabId: this.id }); }
     forward() { return this.t.send("navigate_tab_forward", { context: this.ctx, tabId: this.id }); }
     reload() { return this.t.send("navigate_tab_reload", { context: this.ctx, tabId: this.id }); }
+    async getJsDialog() {
+        const info = await this.t.send("tab_js_dialog_get", {
+            context: this.ctx,
+            tabId: this.id,
+        });
+        return info ? createDialog(this.t, this.ctx, this.id, info) : undefined;
+    }
     screenshot(options = {}) {
         return this.t.send("tab_screenshot", { context: this.ctx, tabId: this.id, options })
             .then((result) => Uint8Array.from(atob(result.dataBase64), c => c.charCodeAt(0)));
@@ -324,6 +331,24 @@ export class Tab {
         return this.t.send("finalize_tabs", { context: this.ctx, keep: [keep] });
     }
 }
+function createDialog(t, ctx, tabId, info) {
+    const handle = (options) => t.send("tab_js_dialog_handle", {
+        context: ctx,
+        tabId,
+        ...options,
+    });
+    const base = {
+        ...info,
+        dismiss: () => handle({ accept: false }),
+    };
+    if (info.type === "confirm") {
+        return { ...base, accept: () => handle({ accept: true }) };
+    }
+    if (info.type === "prompt") {
+        return { ...base, accept: (text) => handle({ accept: true, promptText: text }) };
+    }
+    return base;
+}
 class ContentAPI {
     t;
     ctx;
@@ -338,6 +363,14 @@ class ContentAPI {
             context: this.ctx,
             tabId: this.tabId,
             options: { format: "markdown" },
+        });
+        return result.path ?? result.assetId;
+    }
+    async exportGsuite(type) {
+        const result = await this.t.send("tab_content_export_gsuite", {
+            context: this.ctx,
+            tabId: this.tabId,
+            type,
         });
         return result.path ?? result.assetId;
     }
@@ -435,6 +468,20 @@ export class PlaywrightAPI extends PlaywrightFrameLocator {
     waitForURL(url, options = {}) { return this.t.send("playwright_wait_for_url", { context: this.ctx, tabId: this.tabId, url, options }); }
     waitForLoadState(options = {}) { return this.t.send("playwright_wait_for_load_state", { context: this.ctx, tabId: this.tabId, ...options }); }
     waitForTimeout(timeoutMs) { return this.t.send("playwright_wait_for_timeout", { context: this.ctx, tabId: this.tabId, timeoutMs }); }
+    elementInfo(options) {
+        return this.t.send("playwright_element_info", {
+            context: this.ctx,
+            tabId: this.tabId,
+            options,
+        });
+    }
+    elementScreenshot(options) {
+        return this.t.send("playwright_element_screenshot", {
+            context: this.ctx,
+            tabId: this.tabId,
+            options,
+        }).then((result) => Uint8Array.from(atob(result.dataBase64), c => c.charCodeAt(0)));
+    }
     async waitForEvent(event, options = {}) {
         if (event === "download") {
             const info = await this.t.send("playwright_wait_for_download", { context: this.ctx, tabId: this.tabId, options });

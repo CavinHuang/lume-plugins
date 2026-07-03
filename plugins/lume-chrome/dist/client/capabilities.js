@@ -59,6 +59,33 @@ export class PageAssetsCapability extends DocumentedCapability {
         });
     }
 }
+export class CdpCapability extends DocumentedCapability {
+    send(method, params = {}, options = {}) {
+        return this.context.transport.send("tab_cdp_send", {
+            browserId: this.context.browserId,
+            tabId: this.context.tabId,
+            method,
+            params,
+            options,
+        });
+    }
+    readEvents(options = {}) {
+        return this.context.transport.send("tab_cdp_read_events", {
+            browserId: this.context.browserId,
+            tabId: this.context.tabId,
+            options,
+        });
+    }
+}
+export class BotDetectionCapability extends DocumentedCapability {
+    report(options) {
+        return this.context.transport.send("tab_bot_detection_report", {
+            browserId: this.context.browserId,
+            tabId: this.context.tabId,
+            reason: options.reason,
+        });
+    }
+}
 export function createCapabilityDefinitions() {
     const definitions = [
         {
@@ -75,6 +102,16 @@ export function createCapabilityDefinitions() {
             id: "pageAssets",
             scope: "tab",
             create: (context) => new PageAssetsCapability(context, "pageAssets", "tab"),
+        },
+        {
+            id: "cdp",
+            scope: "tab",
+            create: (context) => new CdpCapability(context, "cdp", "tab"),
+        },
+        {
+            id: "botDetection",
+            scope: "tab",
+            create: (context) => new BotDetectionCapability(context, "botDetection", "tab"),
         },
     ];
     return new Map(definitions.map((definition) => [definition.id, definition]));

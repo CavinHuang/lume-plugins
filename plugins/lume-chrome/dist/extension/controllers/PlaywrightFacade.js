@@ -202,6 +202,24 @@ export class PlaywrightFacade {
     }
     operation(tabId, ast, operation, payload = {}) { return locatorOperation(tabId, ast, operation, payload); }
     async elementScreenshot(tabId, ast, options = {}) { const info = await this.operation(tabId, ast, "elementInfo", options); return this.cdp.screenshot(tabId, { ...options, clip: info.rect }); }
+    async elementInfoAtPoint(tabId, options) {
+        if (!Number.isFinite(options.x) || !Number.isFinite(options.y))
+            throw new Error("playwright.elementInfo requires numeric x and y coordinates");
+        return evalInPage(tabId, (x, y, includeNonInteractable) => {
+            const normalize = (value) => value.replace(/\s+/g, " ").trim();
+            const visible = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.display !== "none" && s.visibility !== "hidden" && Number(s.opacity || 1) > 0; };
+            const role = (el) => el.getAttribute("role") || { A: "link", BUTTON: "button", INPUT: el.type === "checkbox" ? "checkbox" : el.type === "radio" ? "radio" : "textbox", TEXTAREA: "textbox", SELECT: "combobox", IMG: "img", OPTION: "option" }[el.tagName] || "generic";
+            const ariaName = (el) => el.getAttribute("aria-label") || el.getAttribute("title") || el.getAttribute("alt") || null;
+            const escape = (value) => globalThis.CSS?.escape ? CSS.escape(value) : value.replace(/["\\]/g, "\\$&");
+            const selector = (el) => { const candidates = []; const id = el.getAttribute("id"); const testId = el.getAttribute("data-testid"); if (id)
+                candidates.push(`#${escape(id)}`); if (testId)
+                candidates.push(`[data-testid="${escape(testId)}"]`); candidates.push(el.tagName.toLowerCase()); return { primary: candidates[0] ?? null, candidates }; };
+            const elements = (document.elementsFromPoint?.(x, y) ?? [document.elementFromPoint(x, y)]).filter((el) => el instanceof Element);
+            return elements.filter(el => includeNonInteractable || visible(el)).slice(0, 20).map((el) => { const r = el.getBoundingClientRect(); return { tagName: el.tagName, role: role(el), ariaName: ariaName(el), visibleText: normalize(el.innerText || el.textContent || "") || null, testId: el.getAttribute("data-testid"), boundingBox: { x: r.x, y: r.y, width: r.width, height: r.height }, selector: selector(el) }; });
+        }, [options.x, options.y, options.includeNonInteractable === true]);
+    }
+    async elementScreenshotAtPoint(tabId, options) { const info = (await this.elementInfoAtPoint(tabId, options))[0]; if (!info?.boundingBox)
+        throw new Error("No element found at coordinate"); return this.cdp.screenshot(tabId, { ...options, clip: info.boundingBox }); }
     async waitForURL(tabId, url, timeoutMs = 10_000) { const start = Date.now(); while (Date.now() - start < timeoutMs) {
         const tab = await chrome.tabs.get(tabId);
         if (tab.url === url || tab.url?.includes(url))
