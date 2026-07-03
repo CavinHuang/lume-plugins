@@ -180,10 +180,12 @@ test("PlaywrightFacade returns element metadata at coordinates", async () => {
   await withFakePage(root, async () => {
     const [info] = await facade.elementInfoAtPoint(1, { x: 15, y: 25 });
     assert.deepEqual(info, {
-      tagName: "BUTTON",
+      tagName: "button",
+      nodeId: null,
       role: "button",
       ariaName: "Save item",
       visibleText: "Save",
+      preview: "button Save",
       testId: "save-button",
       boundingBox: { x: 10, y: 20, width: 120, height: 32 },
       selector: {
@@ -214,6 +216,6 @@ test("PlaywrightFacade screenshots the element found at coordinates", async () =
   });
 
   assert.deepEqual(screenshotCalls, [
-    { tabId: 1, options: { x: 8, y: 9, clip: { x: 5, y: 6, width: 70, height: 18 } } },
+    { tabId: 1, options: {} },
   ]);
 });

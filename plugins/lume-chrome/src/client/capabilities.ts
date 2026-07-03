@@ -1,5 +1,5 @@
 import type {
-  AdvertisedCapability, BotDetectionReason, BrowserCommandType, CdpReadEventsResult
+  AdvertisedCapability, BotDetectionReason, BrowserAuthRequestOptions, BrowserAuthResult, BrowserCommandType, CdpReadEventsResult
 } from "../shared/protocol";
 import type { BrowserTransport } from "./BrowserClient";
 
@@ -111,6 +111,40 @@ export class BotDetectionCapability extends DocumentedCapability {
   }
 }
 
+export class BrowserAuthCapability extends DocumentedCapability {
+  request(options: BrowserAuthRequestOptions): Promise<BrowserAuthResult> {
+    return this.context.transport.send("tab_browser_auth_request", {
+      browserId: this.context.browserId,
+      tabId: this.context.tabId,
+      options: normalizeBrowserAuthOptions(options),
+    });
+  }
+}
+
+function normalizeBrowserAuthOptions(options: BrowserAuthRequestOptions): BrowserAuthRequestOptions {
+  return {
+    ...options,
+    fields: options.fields.map((field) => ({
+      ...field,
+      selector: normalizeBrowserAuthSelector(field.selector),
+    })),
+    ...(options.submit ? {
+      submit: {
+        ...options.submit,
+        selector: normalizeBrowserAuthSelector(options.submit.selector),
+      }
+    } : {}),
+  };
+}
+
+function normalizeBrowserAuthSelector(selector: unknown): any {
+  if (typeof selector === "string") return selector;
+  if (selector && typeof selector === "object" && "ast" in selector) {
+    return (selector as { ast: unknown }).ast;
+  }
+  return selector;
+}
+
 export function createCapabilityDefinitions(): Map<string, CapabilityDefinition> {
   const definitions: CapabilityDefinition[] = [
     {
@@ -137,6 +171,11 @@ export function createCapabilityDefinitions(): Map<string, CapabilityDefinition>
       id: "botDetection",
       scope: "tab",
       create: (context) => new BotDetectionCapability(context, "botDetection", "tab"),
+    },
+    {
+      id: "browserAuth",
+      scope: "tab",
+      create: (context) => new BrowserAuthCapability(context, "browserAuth", "tab"),
     },
   ];
   return new Map(definitions.map((definition) => [definition.id, definition]));

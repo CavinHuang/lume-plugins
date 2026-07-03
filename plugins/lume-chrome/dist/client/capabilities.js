@@ -86,6 +86,38 @@ export class BotDetectionCapability extends DocumentedCapability {
         });
     }
 }
+export class BrowserAuthCapability extends DocumentedCapability {
+    request(options) {
+        return this.context.transport.send("tab_browser_auth_request", {
+            browserId: this.context.browserId,
+            tabId: this.context.tabId,
+            options: normalizeBrowserAuthOptions(options),
+        });
+    }
+}
+function normalizeBrowserAuthOptions(options) {
+    return {
+        ...options,
+        fields: options.fields.map((field) => ({
+            ...field,
+            selector: normalizeBrowserAuthSelector(field.selector),
+        })),
+        ...(options.submit ? {
+            submit: {
+                ...options.submit,
+                selector: normalizeBrowserAuthSelector(options.submit.selector),
+            }
+        } : {}),
+    };
+}
+function normalizeBrowserAuthSelector(selector) {
+    if (typeof selector === "string")
+        return selector;
+    if (selector && typeof selector === "object" && "ast" in selector) {
+        return selector.ast;
+    }
+    return selector;
+}
 export function createCapabilityDefinitions() {
     const definitions = [
         {
@@ -112,6 +144,11 @@ export function createCapabilityDefinitions() {
             id: "botDetection",
             scope: "tab",
             create: (context) => new BotDetectionCapability(context, "botDetection", "tab"),
+        },
+        {
+            id: "browserAuth",
+            scope: "tab",
+            create: (context) => new BrowserAuthCapability(context, "browserAuth", "tab"),
         },
     ];
     return new Map(definitions.map((definition) => [definition.id, definition]));

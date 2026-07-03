@@ -388,7 +388,7 @@ class TabDevAPI {
         return this.t.send("tab_cdp_call", { context: this.ctx, tabId: this.tabId, method, params, allowMutating });
     }
     subscribe(events) { return this.t.send("tab_cdp_events", { context: this.ctx, tabId: this.tabId, events }); }
-    logs() { return this.t.send("tab_dev_logs", { context: this.ctx, tabId: this.tabId }); }
+    logs(options = {}) { return this.t.send("tab_dev_logs", { context: this.ctx, tabId: this.tabId, options }); }
 }
 class CUAAPI {
     t;

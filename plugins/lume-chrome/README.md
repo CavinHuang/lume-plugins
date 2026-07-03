@@ -37,6 +37,8 @@ recreated in the in-app browser.
 - Chunked large-asset transfer to the Native Host
 - Site allow/session/block storage and just-in-time confirmation requests
 - Restricted CDP event streaming back to the Lume runtime
+- Secure `browserAuth` credential request/fill flow with status-only results
+- Popup diagnostics for Native Host connection, permissions, capabilities and recent errors
 - Diagnostics, Native Host installation, protocol/version metadata and command coverage tests
 
 ## Build
@@ -82,4 +84,5 @@ require the browser/Native Messaging permissions declared in
 This is a functional reference, not a production-ready clone. Cross-origin frame
 locators, browser-store signing/update, real Lume confirmation UI, complete
 WebMCP, and exhaustive upstream Playwright semantics still require product
-integration and hardening. See `docs/FEATURE_COVERAGE.md`.
+integration and hardening. Browser credential entry must use `browserAuth`; do
+not collect secrets through chat fallback. See `docs/FEATURE_COVERAGE.md`.

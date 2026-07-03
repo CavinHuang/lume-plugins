@@ -62,7 +62,8 @@ export class ChromeDebugger {
         await this.ensureAttached(tabId);
         return await chrome.debugger.sendCommand({ tabId }, method, params);
     }
-    async sendRaw(tabId, method, params = {}, options = {}) { await this.ensureAttached(tabId); const target = options.target?.targetId ? { targetId: options.target.targetId } : options.target?.sessionId ? { tabId, sessionId: options.target.sessionId } : { tabId }; const command = chrome.debugger.sendCommand(target, method, params); if (!options.timeoutMs)
+    async sendRaw(tabId, method, params = {}, options = {}) { await this.ensureAttached(tabId); if (options.target?.sessionId && options.target?.targetId)
+        throw new Error("cdp target must specify only one of sessionId or targetId"); const target = options.target?.targetId ? { targetId: options.target.targetId } : options.target?.sessionId ? { tabId, sessionId: options.target.sessionId } : { tabId }; const command = chrome.debugger.sendCommand(target, method, params); if (!options.timeoutMs)
         return command; return await Promise.race([command, new Promise((_, reject) => setTimeout(() => reject(new Error(`Timed out waiting for CDP command: ${method}`)), options.timeoutMs))]); }
     async readEvents(tabId, options = {}) { const current = this.cdpEvents.get(tabId)?.at(-1)?.sequence ?? this.cdpSequence; if (options.afterSequence === undefined)
         return { cursor: current, events: [], hasMore: false, truncated: false }; if (options.methods && options.methods.length === 0)
@@ -111,6 +112,11 @@ export class ChromeDebugger {
             idleStart = 0;
         await new Promise(r => setTimeout(r, 100));
     } throw new Error("Timed out waiting for network idle"); }
-    logs(tabId) { return this.devLogs.get(tabId) ?? []; }
+    logs(tabId, options = {}) { let logs = [...(this.devLogs.get(tabId) ?? [])]; const methods = options.methods ? new Set(options.methods) : undefined; const levels = options.levels ? new Set(options.levels.map(String)) : undefined; if (methods)
+        logs = logs.filter((entry) => methods.has(String(entry.method))); if (levels)
+        logs = logs.filter((entry) => levels.has(String(entry.params?.level ?? entry.level ?? ""))); if (options.filter) {
+        const needle = options.filter.toLowerCase();
+        logs = logs.filter((entry) => JSON.stringify(entry).toLowerCase().includes(needle));
+    } const rawLimit = Number(options.limit ?? logs.length); const limit = Math.max(1, Math.min(Number.isFinite(rawLimit) ? rawLimit : 1, 1000)); return logs.slice(-limit); }
     cleanup(tabId) { this.devLogs.delete(tabId); this.cdpEvents.delete(tabId); this.inflight.delete(tabId); this.activeDialogs.delete(tabId); return this.detach(tabId); }
 }

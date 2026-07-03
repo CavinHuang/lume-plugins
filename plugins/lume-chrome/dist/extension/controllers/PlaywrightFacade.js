@@ -215,11 +215,16 @@ export class PlaywrightFacade {
                 candidates.push(`#${escape(id)}`); if (testId)
                 candidates.push(`[data-testid="${escape(testId)}"]`); candidates.push(el.tagName.toLowerCase()); return { primary: candidates[0] ?? null, candidates }; };
             const elements = (document.elementsFromPoint?.(x, y) ?? [document.elementFromPoint(x, y)]).filter((el) => el instanceof Element);
-            return elements.filter(el => includeNonInteractable || visible(el)).slice(0, 20).map((el) => { const r = el.getBoundingClientRect(); return { tagName: el.tagName, role: role(el), ariaName: ariaName(el), visibleText: normalize(el.innerText || el.textContent || "") || null, testId: el.getAttribute("data-testid"), boundingBox: { x: r.x, y: r.y, width: r.width, height: r.height }, selector: selector(el) }; });
+            return elements.filter(el => includeNonInteractable || visible(el)).slice(0, 20).map((el) => { const r = el.getBoundingClientRect(); const tagName = el.tagName.toLowerCase(); const visibleText = normalize(el.innerText || el.textContent || "") || null; return { tagName, nodeId: null, role: role(el), ariaName: ariaName(el), visibleText, preview: normalize(`${tagName} ${visibleText ?? ""}`) || tagName, testId: el.getAttribute("data-testid"), boundingBox: { x: r.x, y: r.y, width: r.width, height: r.height }, selector: selector(el) }; });
         }, [options.x, options.y, options.includeNonInteractable === true]);
     }
     async elementScreenshotAtPoint(tabId, options) { const info = (await this.elementInfoAtPoint(tabId, options))[0]; if (!info?.boundingBox)
-        throw new Error("No element found at coordinate"); return this.cdp.screenshot(tabId, { ...options, clip: info.boundingBox }); }
+        throw new Error("No element found at coordinate"); const overlayId = `lume-element-shot-${Date.now()}-${Math.random().toString(16).slice(2)}`; await evalInPage(tabId, (box, x, y, id) => { const root = document.createElement("div"); root.id = id; Object.assign(root.style, { position: "fixed", left: "0", top: "0", width: "0", height: "0", zIndex: "2147483647", pointerEvents: "none" }); const rect = document.createElement("div"); Object.assign(rect.style, { position: "fixed", left: `${box.x}px`, top: `${box.y}px`, width: `${box.width}px`, height: `${box.height}px`, border: "2px solid #ff3b30", borderRadius: "6px", boxShadow: "0 0 0 9999px rgba(255,59,48,0.08)" }); const dot = document.createElement("div"); Object.assign(dot.style, { position: "fixed", left: `${x - 5}px`, top: `${y - 5}px`, width: "10px", height: "10px", borderRadius: "999px", background: "#ff3b30", boxShadow: "0 0 0 4px rgba(255,59,48,0.25)" }); root.append(rect, dot); document.body?.append(root); }, [info.boundingBox, options.x, options.y, overlayId]).catch(() => undefined); try {
+        return await this.cdp.screenshot(tabId, {});
+    }
+    finally {
+        await evalInPage(tabId, (id) => document.getElementById(id)?.remove(), [overlayId]).catch(() => undefined);
+    } }
     async waitForURL(tabId, url, timeoutMs = 10_000) { const start = Date.now(); while (Date.now() - start < timeoutMs) {
         const tab = await chrome.tabs.get(tabId);
         if (tab.url === url || tab.url?.includes(url))

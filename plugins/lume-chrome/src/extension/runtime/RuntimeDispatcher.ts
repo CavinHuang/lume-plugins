@@ -18,9 +18,11 @@ import { CdpEventController } from "../controllers/CdpEventController";
 import { AssetTransferController } from "../controllers/AssetTransferController";
 import { ContentExportController } from "../controllers/ContentExportController";
 import { ConfirmationClient } from "../controllers/ConfirmationClient";
+import { BrowserAuthController, type BrowserAuthCredentialResponse } from "../controllers/BrowserAuthController";
 import { injectScript, evalInPage } from "../controllers/PageScript";
 import type { NativeTransport } from "./NativeTransport";
-import { locatorAst } from "../../shared/locator";
+import { locatorAst, type LocatorAst } from "../../shared/locator";
+import type { BrowserAuthSelector } from "../../shared/protocol";
 
 export function createSuccessResponse<T>(id:string,result:T):RpcResponse<T|null>{return{jsonrpc:"2.0",id,result:result===undefined?null:result};}
 const ok=createSuccessResponse;
@@ -46,18 +48,29 @@ export class RuntimeDispatcher {
   readonly assets:PageAssetsController;
   readonly content:ContentExportController;
   readonly confirmations:ConfirmationClient;
+  readonly browserAuth:BrowserAuthController;
   constructor(private readonly native:NativeTransport){
     this.cdpEvents=new CdpEventController(native,this.cdp);
     this.transfer=new AssetTransferController(native);
     this.assets=new PageAssetsController(this.transfer);
     this.content=new ContentExportController(this.transfer);
     this.confirmations=new ConfirmationClient(native,this.sitePermissions);
+    this.browserAuth=new BrowserAuthController({
+      tabUrl:async(tabId)=>{const tab=await chrome.tabs.get(tabId);return tab.url;},
+      requestCredentials:async(request)=>normalizeBrowserAuthCredentialResponse(
+        await this.native.requestHost("host.browserAuth.request",request,300_000).catch(()=>({status:"unavailable"}))
+      ),
+      validateLocator:async(tabId,selector)=>{try{return await this.pw.operation<number>(tabId,toLocatorAst(selector),"count",{})===1&&await this.pw.operation<boolean>(tabId,toLocatorAst(selector),"isVisible",{})&&await this.pw.operation<boolean>(tabId,toLocatorAst(selector),"isEnabled",{});}catch{return false;}},
+      fillField:(tabId,selector,value)=>this.pw.operation(tabId,toLocatorAst(selector),"fill",{text:value}),
+      click:(tabId,selector)=>this.pw.operation(tabId,toLocatorAst(selector),"click",{}),
+      press:(tabId,selector,key)=>this.pw.operation(tabId,toLocatorAst(selector),"press",{key})
+    });
   }
   async ready(){await Promise.all([this.sessions.ready(),this.leases.ready()]);}
   private async context(p:any){const ctx=requireContext(p);await this.sessions.getOrCreate(ctx);return ctx;}
   private async chromeTab(tabId:string,ctx:BrowserContext){return(await this.leases.get(tabId,ctx)).chromeTabId;}
   private async showCursor(chromeTabId:number,x:number,y:number){await injectScript(chromeTabId,"dist/extension/content/overlay.js").catch(()=>undefined);await chrome.tabs.sendMessage(chromeTabId,{type:"LUME_CURSOR_MOVE",x,y}).catch(()=>undefined);}
-  private extensionCaps():BrowserCapabilities{return{id:"chrome-extension",browserId:"chrome-extension",name:"Lume Chrome",type:"extension",clientType:"extension",protocolVersion:PROTOCOL_VERSION,generation:this.native.connectionGeneration(),metadata:{},capabilities:{browser:[{id:"visibility",description:"Show or hide the browser window."},{id:"viewport",description:"Set or reset the browser viewport."}],tab:[{id:"pageAssets",description:"Inventory and bundle rendered page assets."},{id:"cdp",description:"Read buffered CDP events and send permitted CDP commands."},{id:"botDetection",description:"Report bot detection or access-control blockers for this tab."}]},apiSupportOverrides:{"Tabs.content":false,"Tab.content":false},permissions:{debugger:"granted",nativeMessaging:"granted",tabs:"granted",tabGroups:"granted",scripting:"granted",history:chrome.history?"optional":"missing",downloads:chrome.downloads?"granted":"missing",bookmarks:chrome.bookmarks?"optional":"missing"},features:{openTabs:"available",claimTab:"available",cdp:"available",cua:"available",dom_cua:"available",playwright:"limited",pageAssets:"available",tabGroups:"available",history:"limited",contentExport:"available",fileChooser:"available",downloads:"available"}};}
+  private extensionCaps():BrowserCapabilities{return{id:"chrome-extension",browserId:"chrome-extension",name:"Lume Chrome",type:"extension",clientType:"extension",protocolVersion:PROTOCOL_VERSION,generation:this.native.connectionGeneration(),metadata:{},capabilities:{browser:[{id:"visibility",description:"Show or hide the browser window."},{id:"viewport",description:"Set or reset the browser viewport."}],tab:[{id:"pageAssets",description:"Inventory and bundle rendered page assets."},{id:"cdp",description:"Read buffered CDP events and send permitted CDP commands."},{id:"botDetection",description:"Report bot detection or access-control blockers for this tab."},{id:"browserAuth",description:"Securely collect user credentials and fill validated login forms."}]},apiSupportOverrides:{"Tabs.content":false,"Tab.content":false},permissions:{debugger:"granted",nativeMessaging:"granted",tabs:"granted",tabGroups:"granted",scripting:"granted",history:chrome.history?"optional":"missing",downloads:chrome.downloads?"granted":"missing",bookmarks:chrome.bookmarks?"optional":"missing"},features:{openTabs:"available",claimTab:"available",cdp:"available",cua:"available",dom_cua:"available",playwright:"limited",pageAssets:"available",tabGroups:"available",history:"limited",contentExport:"available",fileChooser:"available",downloads:"available",browserAuth:"available"}};}
   async dispatch(req:RpcRequest):Promise<RpcResponse>{
     try{
       const p:any=req.params??{};
@@ -109,7 +122,7 @@ export class RuntimeDispatcher {
         case"tab_cdp_read_events":return ok(req.id,await this.cdp.readEvents(await this.chromeTab(p.tabId,ctx!),p.options??{}));
         case"tab_bot_detection_report":{const reasons=["captcha_failed","access_denied","challenge_loop","unexpected_bot_error"];if(!reasons.includes(p.reason))throw new Error(`Invalid bot detection reason: ${String(p.reason)}`);const tab=await chrome.tabs.get(await this.chromeTab(p.tabId,ctx!));let hostname:string|null=null;try{hostname=tab.url?new URL(tab.url).hostname:null;}catch{hostname=null;}this.native.notifyHost("browser.botDetection.report",{context:ctx,tabId:p.tabId,hostname,reason:p.reason});return ok(req.id,{hostname,status:"reported"});}
         case"tab_cdp_events":await this.cdpEvents.subscribe(await this.chromeTab(p.tabId,ctx!),p.events??[]);return ok(req.id,undefined);
-        case"tab_dev_logs":return ok(req.id,this.cdp.logs(await this.chromeTab(p.tabId,ctx!)));
+        case"tab_dev_logs":return ok(req.id,this.cdp.logs(await this.chromeTab(p.tabId,ctx!),p.options??{}));
         case"browser_viewport_set":for(const t of await this.leases.listSessionTabs(ctx!))await this.cdp.setViewport(t.chromeTabId,p.options);return ok(req.id,undefined);
         case"browser_viewport_reset":for(const t of await this.leases.listSessionTabs(ctx!))await this.cdp.resetViewport(t.chromeTabId);return ok(req.id,undefined);
         case"cua_click":{const id=await this.chromeTab(p.tabId,ctx!);await this.showCursor(id,p.x,p.y);await this.cdp.click(id,p.x,p.y);return ok(req.id,undefined);}
@@ -149,6 +162,7 @@ export class RuntimeDispatcher {
         case"tab_clipboard_write":await this.confirmations.ensureAllowed({kind:"clipboard",description:"Write browser clipboard content",source:"agent"},ctx!);await this.clipboard.write(await this.chromeTab(p.tabId,ctx!),p.data);return ok(req.id,undefined);
         case"tab_clipboard_write_text":await this.confirmations.ensureAllowed({kind:"clipboard",description:"Write text to the browser clipboard",source:"agent",textPreview:String(p.text??"").slice(0,120)},ctx!);await this.clipboard.writeText(await this.chromeTab(p.tabId,ctx!),p.text);return ok(req.id,undefined);
         case"tab_browser_auth_handoff":await this.leases.handoff([p.tabId],ctx!);this.native.notifyHost("browser.auth.handoff",{context:ctx,tabId:p.tabId,reason:p.reason});return ok(req.id,undefined);
+        case"tab_browser_auth_request":return ok(req.id,await this.browserAuth.request(await this.chromeTab(p.tabId,ctx!),{...p.options,context:ctx,tabId:p.tabId}));
         case"browser_auth":this.native.notifyHost("browser.auth.request",{context:ctx,reason:p.reason});return ok(req.id,undefined);
         case"tab_content_export":return ok(req.id,await this.content.export(await this.chromeTab(p.tabId,ctx!),p.options?.format??"text"));
         case"tab_content_export_gsuite":return ok(req.id,await this.content.exportGsuite(await this.chromeTab(p.tabId,ctx!)));
@@ -170,4 +184,16 @@ export class RuntimeDispatcher {
     }catch(error){if(error instanceof BrowserRuntimeException)return fail(req.id,error.code,error.message,error.details);return fail(req.id,(error as any)?.code??"E_BROWSER_COMMAND_FAILED",error instanceof Error?error.message:String(error),{method:req.method});}
   }
   async onTabRemoved(tabId:number){await this.leases.onTabRemoved(tabId);await this.cdp.cleanup(tabId);this.chooser.cleanupTab(tabId);this.cdpEvents.cleanup(tabId);}
+}
+
+function toLocatorAst(selector:BrowserAuthSelector):LocatorAst{
+  return typeof selector==="string"?locatorAst({kind:"css",selector}):selector;
+}
+
+function normalizeBrowserAuthCredentialResponse(value:unknown):BrowserAuthCredentialResponse{
+  const input=value as Partial<BrowserAuthCredentialResponse>|undefined;
+  if(!input||typeof input.status!=="string")return{status:"unavailable"};
+  if(input.status==="approved")return{status:"approved",values:input.values??{}};
+  if(input.status==="declined"||input.status==="cancelled"||input.status==="unavailable"||input.status==="expired"||input.status==="origin_changed"||input.status==="page_changed"||input.status==="locator_invalid"||input.status==="submission_failed")return{status:input.status};
+  return{status:"unavailable"};
 }

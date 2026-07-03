@@ -191,6 +191,29 @@ var png = await tab.screenshot({ format: "png" });
 await nodeRepl.emitImage(`data:image/png;base64,${Buffer.from(png).toString("base64")}`);
 ```
 
+## Browser Auth
+
+For passwords, OTP codes, or other login secrets, use the tab `browserAuth`
+capability. Never ask the user to paste credentials into chat, and never type a
+credential with ordinary `locator.fill`, `tab.cua.type`, or `nodeRepl.write`.
+
+```js
+var auth = await tab.capabilities.get("browserAuth");
+var authResult = await auth.request({
+  origin: "https://accounts.example.test",
+  reason: "Sign in is required to continue the browser task.",
+  expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+  fields: [
+    { id: "password", label: "Password", type: "password", autocomplete: "current-password", required: true, selector: "input[type=password]" }
+  ],
+  submit: { selector: "button[type=submit]", action: "click" }
+});
+nodeRepl.write(JSON.stringify(authResult));
+```
+
+If `browserAuth` is unavailable, stop and report that secure browser credential
+entry is unavailable. Do not degrade to ordinary chat input for secrets.
+
 ## APIs That Do Not Exist
 
 Do not use `browser.tabs.create`; use `browser.tabs.new(...)` or

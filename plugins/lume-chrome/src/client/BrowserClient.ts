@@ -451,7 +451,7 @@ class TabDevAPI {
     return this.t.send("tab_cdp_call", { context: this.ctx, tabId: this.tabId, method, params, allowMutating });
   }
   subscribe(events: string[]): Promise<void> { return this.t.send("tab_cdp_events", { context: this.ctx, tabId: this.tabId, events }); }
-  logs(): Promise<unknown[]> { return this.t.send("tab_dev_logs", { context: this.ctx, tabId: this.tabId }); }
+  logs(options: { levels?: string[]; methods?: string[]; limit?: number; filter?: string } = {}): Promise<unknown[]> { return this.t.send("tab_dev_logs", { context: this.ctx, tabId: this.tabId, options }); }
 }
 
 class CUAAPI {

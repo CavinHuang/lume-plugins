@@ -11,6 +11,10 @@ import type {
 } from "../shared/protocol";
 
 type ConfirmationDecision = { approved: boolean; remember?: "session" | "always" | "block" };
+type BrowserAuthCredentialResponse = {
+  status: "approved" | "declined" | "cancelled" | "unavailable" | "expired" | "origin_changed" | "page_changed" | "locator_invalid" | "submission_failed";
+  values?: Record<string, string>;
+};
 type JsonRecord = Record<string, unknown>;
 
 export interface BrowserAppServerOptions {
@@ -19,6 +23,7 @@ export interface BrowserAppServerOptions {
   path?: string;
   requestTimeoutMs?: number;
   confirm?: (params: unknown) => Promise<ConfirmationDecision> | ConfirmationDecision;
+  browserAuth?: (params: unknown) => Promise<BrowserAuthCredentialResponse> | BrowserAuthCredentialResponse;
   onNotification?: (method: string, params: unknown) => void;
 }
 
@@ -94,7 +99,7 @@ class BrowserAppServer {
   constructor(
     private readonly server: any,
     private readonly options: Required<Pick<BrowserAppServerOptions, "host" | "path" | "requestTimeoutMs">> &
-      Pick<BrowserAppServerOptions, "confirm" | "onNotification">,
+      Pick<BrowserAppServerOptions, "confirm" | "browserAuth" | "onNotification">,
     port: number,
   ) {
     this.url = `ws://${options.host}:${port}${options.path}`;
@@ -185,6 +190,12 @@ class BrowserAppServer {
           ? await this.options.confirm(request.params)
           : { approved: true, remember: "session" as const };
         return { jsonrpc: "2.0", id: request.id, result };
+      }
+      if (request.method === "host.browserAuth.request") {
+        const result = this.options.browserAuth
+          ? await this.options.browserAuth(request.params)
+          : { status: "unavailable" as const };
+        return { jsonrpc: "2.0", id: request.id, result: normalizeBrowserAuthCredentialResponse(result) };
       }
       return {
         jsonrpc: "2.0",
@@ -410,6 +421,7 @@ export async function createBrowserAppServer(options: BrowserAppServerOptions = 
     path,
     requestTimeoutMs,
     confirm: options.confirm,
+    browserAuth: options.browserAuth,
     onNotification: options.onNotification,
   }, port);
   return appServer;
@@ -424,7 +436,10 @@ export async function setupNodeReplBrowserRuntime(options: SetupNodeReplBrowserR
     return runtime;
   }
 
-  const bridge = await createBrowserAppServer(options);
+  const bridge = await createBrowserAppServer({
+    ...options,
+    browserAuth: options.browserAuth ?? resolveNodeReplBrowserAuth(globals),
+  });
   const context = options.context ?? createDefaultBrowserContext(options);
   const transport = bridge.createTransport();
   const agent = { browsers: new BrowserRegistry(transport, context) };
@@ -479,6 +494,46 @@ function readProcessCwd(): string | null {
   } catch {
     return null;
   }
+}
+
+function resolveNodeReplBrowserAuth(
+  globals: Record<string, unknown>,
+): BrowserAppServerOptions["browserAuth"] | undefined {
+  const nodeRepl = globals.nodeRepl as { browserAuth?: { request?: unknown } } | undefined;
+  const request = nodeRepl?.browserAuth?.request;
+  return typeof request === "function"
+    ? (params) => request.call(nodeRepl.browserAuth, params) as Promise<BrowserAuthCredentialResponse> | BrowserAuthCredentialResponse
+    : undefined;
+}
+
+function normalizeBrowserAuthCredentialResponse(value: unknown): BrowserAuthCredentialResponse {
+  const input = value as Partial<BrowserAuthCredentialResponse> | undefined;
+  if (!input || typeof input.status !== "string") return { status: "unavailable" };
+  if (input.status === "approved") {
+    return { status: "approved", values: sanitizeBrowserAuthValues(input.values) };
+  }
+  if (
+    input.status === "declined"
+    || input.status === "cancelled"
+    || input.status === "unavailable"
+    || input.status === "expired"
+    || input.status === "origin_changed"
+    || input.status === "page_changed"
+    || input.status === "locator_invalid"
+    || input.status === "submission_failed"
+  ) {
+    return { status: input.status };
+  }
+  return { status: "unavailable" };
+}
+
+function sanitizeBrowserAuthValues(values: unknown): Record<string, string> {
+  if (!isRecord(values)) return {};
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (typeof value === "string") result[key] = value;
+  }
+  return result;
 }
 
 function buildSearchUrl(engine: BrowserControlSearchOptions["engine"], query: string): string {

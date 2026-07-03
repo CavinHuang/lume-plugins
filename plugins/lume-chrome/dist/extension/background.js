@@ -11,6 +11,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse(nativeTransport.getStatus());
         return true;
     }
+    if (message?.type === "RUN_DIAGNOSTICS") {
+        void dispatcher.dispatch({ jsonrpc: "2.0", id: `popup-${Date.now()}`, method: "runtime_diagnostics", params: {} }).then((response) => sendResponse(response.result ?? response.error)).catch((error) => sendResponse({ status: "error", lastError: String(error) }));
+        return true;
+    }
     if (message?.type === "CONTENT_PING") {
         sendResponse({ pong: true });
         return true;

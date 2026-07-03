@@ -24,6 +24,8 @@
 - Content export and GSuite-oriented visible content export
 - Page asset inventory, download, inline SVG export and manifest generation
 - CDP event subscriptions and developer log buffer
+- Secure browserAuth request/fill/submit flow with status-only tool result
+- Popup health panel with native-host, permission, capability and diagnostic status
 - History/bookmark/top-sites/reading-list/session wrappers
 - Command declaration/dispatcher coverage test
 
@@ -33,7 +35,6 @@
 - Locator `and/or`: represented in the AST, but the page resolver intentionally does not yet recursively combine nested AST results
 - Playwright semantics: actionability is substantially modeled, but it is not a full Playwright browser engine
 - GSuite export: visible-content heuristic rather than product-specific internal model extraction
-- Browser auth handoff: lifecycle/events exist; Lume desktop handoff UI must consume them
 - Confirmation: protocol and persistence exist; Lume desktop approval UI is external
 - App Server discovery: command launch and WebSocket reconnect exist; installed-version/channel discovery is Lume-product-specific
 
@@ -41,6 +42,6 @@
 
 - Chrome Web Store packaging/signing/update pipeline
 - Complete WebMCP implementation
-- Password/CAPTCHA/payment automation; these are intentionally user handoff operations
+- CAPTCHA/payment automation; these are intentionally user handoff operations
 - Full accessibility-tree locator engine across all cross-origin frames
 - Original Codex proprietary code, executable internals, icons, prompts or branding

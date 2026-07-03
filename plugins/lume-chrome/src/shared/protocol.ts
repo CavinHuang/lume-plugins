@@ -25,7 +25,7 @@ export type BrowserCommandType =
   | "tab_id" | "tab_title" | "tab_url" | "tab_screenshot" | "tab_js_dialog_get" | "tab_js_dialog_handle"
   | "tab_cdp_call" | "tab_cdp_events" | "tab_cdp_send" | "tab_cdp_read_events" | "tab_dev_logs"
   | "tab_clipboard_read" | "tab_clipboard_read_text" | "tab_clipboard_write" | "tab_clipboard_write_text"
-  | "tab_browser_auth_handoff" | "tab_content_export" | "tab_content_export_gsuite"
+  | "tab_browser_auth_handoff" | "tab_browser_auth_request" | "tab_content_export" | "tab_content_export_gsuite"
   | "tab_capabilities_list" | "tab_capability_documentation" | "tab_page_assets_list" | "tab_page_assets_bundle"
   | "tab_bot_detection_report"
   | "playwright_dom_snapshot" | "playwright_evaluate" | "playwright_element_info" | "playwright_element_screenshot"
@@ -105,13 +105,37 @@ export type JsDialogType = "alert" | "beforeunload" | "confirm" | "prompt";
 export interface JsDialogInfo { type: JsDialogType; message?: string; defaultValue?: string; }
 export interface CoordinateElementInfo {
   tagName: string;
+  nodeId?: number | null;
   role?: string | null;
   ariaName?: string | null;
   visibleText?: string | null;
+  preview?: string | null;
   testId?: string | null;
   boundingBox?: { x: number; y: number; width: number; height: number } | null;
   selector: { primary?: string | null; candidates: string[]; frameSelectors?: string[] };
 }
+export type BrowserAuthStatus = "submitted" | "declined" | "cancelled" | "unavailable" | "expired" | "origin_changed" | "page_changed" | "locator_invalid" | "submission_failed";
+export type BrowserAuthSelector = string | LocatorAst;
+export interface BrowserAuthField {
+  id: string;
+  label: string;
+  type: string;
+  autocomplete?: string;
+  required?: boolean;
+  selector: BrowserAuthSelector;
+}
+export interface BrowserAuthSubmit {
+  selector: BrowserAuthSelector;
+  action: "click" | "press_enter";
+}
+export interface BrowserAuthRequestOptions {
+  origin: string;
+  reason?: string;
+  expires_at: string;
+  fields: BrowserAuthField[];
+  submit?: BrowserAuthSubmit;
+}
+export interface BrowserAuthResult { status: BrowserAuthStatus; }
 export type BotDetectionReason = "captcha_failed" | "access_denied" | "challenge_loop" | "unexpected_bot_error";
 export interface CdpBufferedEvent {
   method: string;

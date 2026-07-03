@@ -7,14 +7,16 @@ const BROWSER_CAPABILITIES:CapabilityInfo[]=[
 const TAB_CAPABILITIES:CapabilityInfo[]=[
   {id:"pageAssets",name:"Page assets",scope:"tab",description:"Inventory and bundle rendered page assets.",state:"available"},
   {id:"cdp",name:"CDP",scope:"tab",description:"Read buffered CDP events and send permitted CDP commands.",state:"available"},
-  {id:"botDetection",name:"Bot detection",scope:"tab",description:"Report bot detection or access-control blockers for this tab.",state:"available"}
+  {id:"botDetection",name:"Bot detection",scope:"tab",description:"Report bot detection or access-control blockers for this tab.",state:"available"},
+  {id:"browserAuth",name:"Browser auth",scope:"tab",description:"Securely collect user credentials and fill a validated login form without returning values to the agent.",state:"available"}
 ];
 const DOCS:Record<string,string>={
   visibility:"Use set(true) to show the browser window and set(false) to hide it. Use get() to read whether the browser is currently visible.",
   viewport:"Use set({width,height}) only when a specific viewport is required. Use reset() before finishing unless the user asked to keep the viewport.",
   pageAssets:"Use list() to inventory assets observed in the rendered page state, then bundle(...) to export selected assets through the native host.",
   cdp:"Use send(method, params?, options?) for permitted CDP commands and readEvents(options?) for buffered events. Prefer higher-level browser APIs unless raw CDP is needed.",
-  botDetection:"Use report({reason}) only when the current tab is blocked by CAPTCHA, access denial, challenge loops, or another bot-detection failure."
+  botDetection:"Use report({reason}) only when the current tab is blocked by CAPTCHA, access denial, challenge loops, or another bot-detection failure.",
+  browserAuth:"Use request({origin, reason, expires_at, fields, submit?}) only for visible enabled credential fields. The result contains only a status and never credential values."
 };
 export class CapabilityRegistry {
   list(scope:"browser"|"tab"){return scope==="browser"?BROWSER_CAPABILITIES:TAB_CAPABILITIES;}

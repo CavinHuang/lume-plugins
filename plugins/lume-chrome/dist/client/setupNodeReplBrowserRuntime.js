@@ -95,6 +95,12 @@ class BrowserAppServer {
                     : { approved: true, remember: "session" };
                 return { jsonrpc: "2.0", id: request.id, result };
             }
+            if (request.method === "host.browserAuth.request") {
+                const result = this.options.browserAuth
+                    ? await this.options.browserAuth(request.params)
+                    : { status: "unavailable" };
+                return { jsonrpc: "2.0", id: request.id, result: normalizeBrowserAuthCredentialResponse(result) };
+            }
             return {
                 jsonrpc: "2.0",
                 id: request.id,
@@ -308,6 +314,7 @@ export async function createBrowserAppServer(options = {}) {
         path,
         requestTimeoutMs,
         confirm: options.confirm,
+        browserAuth: options.browserAuth,
         onNotification: options.onNotification,
     }, port);
     return appServer;
@@ -320,7 +327,10 @@ export async function setupNodeReplBrowserRuntime(options = {}) {
         bindNodeReplBrowserGlobals(globals, runtime);
         return runtime;
     }
-    const bridge = await createBrowserAppServer(options);
+    const bridge = await createBrowserAppServer({
+        ...options,
+        browserAuth: options.browserAuth ?? resolveNodeReplBrowserAuth(globals),
+    });
     const context = options.context ?? createDefaultBrowserContext(options);
     const transport = bridge.createTransport();
     const agent = { browsers: new BrowserRegistry(transport, context) };
@@ -371,6 +381,42 @@ function readProcessCwd() {
     catch {
         return null;
     }
+}
+function resolveNodeReplBrowserAuth(globals) {
+    const nodeRepl = globals.nodeRepl;
+    const request = nodeRepl?.browserAuth?.request;
+    return typeof request === "function"
+        ? (params) => request.call(nodeRepl.browserAuth, params)
+        : undefined;
+}
+function normalizeBrowserAuthCredentialResponse(value) {
+    const input = value;
+    if (!input || typeof input.status !== "string")
+        return { status: "unavailable" };
+    if (input.status === "approved") {
+        return { status: "approved", values: sanitizeBrowserAuthValues(input.values) };
+    }
+    if (input.status === "declined"
+        || input.status === "cancelled"
+        || input.status === "unavailable"
+        || input.status === "expired"
+        || input.status === "origin_changed"
+        || input.status === "page_changed"
+        || input.status === "locator_invalid"
+        || input.status === "submission_failed") {
+        return { status: input.status };
+    }
+    return { status: "unavailable" };
+}
+function sanitizeBrowserAuthValues(values) {
+    if (!isRecord(values))
+        return {};
+    const result = {};
+    for (const [key, value] of Object.entries(values)) {
+        if (typeof value === "string")
+            result[key] = value;
+    }
+    return result;
 }
 function buildSearchUrl(engine, query) {
     const encoded = encodeURIComponent(query);

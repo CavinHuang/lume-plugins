@@ -14,6 +14,7 @@ function makeTransport() {
       if (method.endsWith("_documentation")) return `docs:${params.capabilityId}`;
       if (method === "browser_visibility_get") return true;
       if (method === "tab_page_assets_list") return { id: "inventory-1", assets: [] };
+      if (method === "tab_browser_auth_request") return { status: "submitted" };
       return null;
     },
   };
@@ -112,6 +113,64 @@ test("botDetection capability reports a reason for a tab", async () => {
       reason: "access_denied",
     },
   });
+});
+
+test("browserAuth capability requests credentials without exposing values to the caller", async () => {
+  const transport = makeTransport();
+  const collection = new CapabilityCollection({
+    advertised: [{ id: "browserAuth", description: "Browser auth" }],
+    browserId: "chrome-1",
+    definitions: createCapabilityDefinitions(),
+    scope: "tab",
+    tabId: "42",
+    transport,
+  });
+
+  const browserAuth = await collection.get("browserAuth");
+  const result = await browserAuth.request({
+    origin: "https://accounts.example.test",
+    reason: "Sign in is required.",
+    expires_at: "2026-07-03T12:00:00.000Z",
+    fields: [{
+      id: "password",
+      label: "Password",
+      type: "password",
+      autocomplete: "current-password",
+      required: true,
+      selector: "input[type=password]",
+    }],
+    submit: {
+      selector: "button[type=submit]",
+      action: "click",
+    },
+  });
+
+  assert.equal(result.status, "submitted");
+  assert.deepEqual(transport.calls.at(-1), {
+    method: "tab_browser_auth_request",
+    params: {
+      browserId: "chrome-1",
+      tabId: "42",
+      options: {
+        origin: "https://accounts.example.test",
+        reason: "Sign in is required.",
+        expires_at: "2026-07-03T12:00:00.000Z",
+        fields: [{
+          id: "password",
+          label: "Password",
+          type: "password",
+          autocomplete: "current-password",
+          required: true,
+          selector: "input[type=password]",
+        }],
+        submit: {
+          selector: "button[type=submit]",
+          action: "click",
+        },
+      },
+    },
+  });
+  assert.doesNotMatch(JSON.stringify(result), /password-value|secret|current-password-value/);
 });
 
 test("unknown and internal capabilities are unavailable", async () => {

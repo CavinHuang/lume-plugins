@@ -4,19 +4,97 @@
     <meta charset="utf-8" />
     <title>Lume Browser</title>
     <style>
-      body { width: 280px; margin: 0; padding: 14px; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      :root {
+        color: #18202f;
+        background: #f6f3ea;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        width: 340px;
+        margin: 0;
+        padding: 16px;
+        background:
+          radial-gradient(circle at 20% 0%, rgba(255, 180, 86, 0.28), transparent 34%),
+          linear-gradient(145deg, #fffaf0, #eef5ef);
+      }
+      .hero {
+        border: 1px solid rgba(24, 32, 47, 0.08);
+        border-radius: 18px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.72);
+        box-shadow: 0 18px 42px rgba(42, 38, 29, 0.12);
+      }
       .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-      .status { padding: 4px 8px; border-radius: 999px; background: #eee; font-size: 12px; }
-      button { width: 100%; margin-top: 10px; padding: 8px; border-radius: 8px; border: 1px solid #ddd; background: white; }
-      pre { white-space: pre-wrap; font-size: 11px; color: #555; }
+      h1 { margin: 0; font-size: 16px; letter-spacing: -0.02em; }
+      .status {
+        padding: 4px 9px;
+        border-radius: 999px;
+        background: #e9e9e2;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .status[data-tone="ok"] { background: #dff4dc; color: #226b2c; }
+      .status[data-tone="warn"] { background: #fff0c2; color: #8a5c00; }
+      .status[data-tone="error"] { background: #ffe1dc; color: #a33122; }
+      #host { margin: 10px 0 0; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; color: #667085; }
+      #summary { margin: 10px 0 0; font-size: 13px; line-height: 1.45; color: #384152; }
+      button {
+        width: 100%;
+        margin-top: 10px;
+        padding: 9px 10px;
+        border-radius: 12px;
+        border: 1px solid rgba(24, 32, 47, 0.12);
+        background: #192236;
+        color: white;
+        font-weight: 700;
+      }
+      button.secondary { background: rgba(255, 255, 255, 0.75); color: #192236; }
+      h2 { margin: 14px 0 7px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #7b7f8b; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+      .card {
+        display: flex;
+        min-height: 34px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        border-radius: 12px;
+        padding: 7px 8px;
+        background: rgba(255,255,255,0.68);
+        font-size: 11px;
+        color: #596273;
+      }
+      .card strong { color: #202838; }
+      details { margin-top: 12px; }
+      summary { cursor: pointer; font-size: 12px; color: #596273; }
+      pre {
+        max-height: 150px;
+        overflow: auto;
+        white-space: pre-wrap;
+        border-radius: 12px;
+        padding: 10px;
+        background: rgba(25, 34, 54, 0.08);
+        font-size: 11px;
+        color: #384152;
+      }
     </style>
   </head>
   <body>
-    <div class="row"><strong>Lume Browser</strong><span id="status" class="status">checking</span></div>
-    <p id="host">Native host: unknown</p>
-    <button id="open-settings">Open Lume settings</button>
-    <button id="diagnose">Run diagnostics</button>
-    <pre id="details"></pre>
+    <section class="hero">
+      <div class="row"><h1>Lume Browser</h1><span id="status" class="status">Checking</span></div>
+      <p id="host">com.lume.browser</p>
+      <p id="summary">Checking browser bridge health...</p>
+      <button id="diagnose"><span id="primary-action">Run diagnostics</span></button>
+      <button id="open-settings" class="secondary">Open Lume browser settings</button>
+      <button id="copy-details" class="secondary">Copy diagnostics</button>
+    </section>
+    <h2>Permissions</h2>
+    <div id="permissions" class="grid"></div>
+    <h2>Capabilities</h2>
+    <div id="capabilities" class="grid"></div>
+    <details>
+      <summary>Raw diagnostics</summary>
+      <pre id="details"></pre>
+    </details>
     <script src="dist/popup/popup.js" type="module"></script>
   </body>
 </html>

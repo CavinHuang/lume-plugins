@@ -84,6 +84,7 @@ because temporary background extraction is not implemented.
 | `pageAssets` | tab | `await tab.capabilities.get("pageAssets")` |
 | `cdp` | tab | `await tab.capabilities.get("cdp")` |
 | `botDetection` | tab | `await tab.capabilities.get("botDetection")` |
+| `browserAuth` | tab | `await tab.capabilities.get("browserAuth")` |
 
 A capability can be obtained only when the backend advertises it and the client
 has a callable definition for it.
@@ -104,11 +105,17 @@ Canonical method names include `locator.readAll()` and all methods in the table.
 Use `tab.playwright.waitForEvent("filechooser")` before file chooser upload
 flows.
 
-## Unavailable Codex Capabilities
+## Secure Browser Auth
 
-| Capability | Status | Reason |
+| Capability | Status | Public API |
 | --- | --- | --- |
-| `browserAuth` | deferred | Secure credential handoff needs a separate Lume interruption flow and trusted credential UI. |
+| `browserAuth` | implemented | `await tab.capabilities.get("browserAuth").request(options)` |
+
+`browserAuth.request({ origin, reason, expires_at, fields, submit? })` returns
+only `{ status }`. It never returns password, OTP, cookies, screenshots, DOM
+snippets, full URLs, or query strings to the agent. If `browserAuth` is
+`unavailable`, do not ask the user to paste secrets into chat; stop and report
+that secure browser credential entry is unavailable.
 
 ## CUA
 

@@ -42,6 +42,8 @@ test("browser skill starts through Lume node_repl MCP", async () => {
   assert.match(skill, /Do not use `bridge\.isConnected`/);
   assert.match(skill, /Always `await agent\.browsers\.get/);
   assert.match(skill, /browser\.documentation\(\)/);
+  assert.match(skill, /Browser Auth/);
+  assert.match(skill, /Never ask the user to paste credentials into chat/);
   assert.match(skill, /tab\.playwright\.domSnapshot\(\)/);
   assert.match(skill, /tab\.dom_cua\.get_visible_dom\(\)/);
   assert.match(skill, /nodeRepl\.emitImage/);
@@ -99,8 +101,8 @@ test("browser API matrix documents the public surface", async () => {
   assert.match(matrix, /waitForEvent/);
   assert.match(matrix, /file chooser/);
   assert.match(matrix, /download/);
-  assert.match(matrix, /Unavailable Codex Capabilities/);
+  assert.match(matrix, /Secure Browser Auth/);
   assert.match(matrix, /browserAuth/);
-  assert.match(matrix, /deferred/);
+  assert.match(matrix, /never returns password, OTP/);
   assert.doesNotMatch(matrix, /webmcp.*implemented/i);
 });

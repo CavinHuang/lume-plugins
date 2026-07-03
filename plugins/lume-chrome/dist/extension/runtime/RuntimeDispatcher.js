@@ -18,6 +18,7 @@ import { CdpEventController } from "../controllers/CdpEventController.js";
 import { AssetTransferController } from "../controllers/AssetTransferController.js";
 import { ContentExportController } from "../controllers/ContentExportController.js";
 import { ConfirmationClient } from "../controllers/ConfirmationClient.js";
+import { BrowserAuthController } from "../controllers/BrowserAuthController.js";
 import { injectScript, evalInPage } from "../controllers/PageScript.js";
 import { locatorAst } from "../../shared/locator.js";
 export function createSuccessResponse(id, result) { return { jsonrpc: "2.0", id, result: result === undefined ? null : result }; }
@@ -45,6 +46,7 @@ export class RuntimeDispatcher {
     assets;
     content;
     confirmations;
+    browserAuth;
     constructor(native) {
         this.native = native;
         this.cdpEvents = new CdpEventController(native, this.cdp);
@@ -52,12 +54,25 @@ export class RuntimeDispatcher {
         this.assets = new PageAssetsController(this.transfer);
         this.content = new ContentExportController(this.transfer);
         this.confirmations = new ConfirmationClient(native, this.sitePermissions);
+        this.browserAuth = new BrowserAuthController({
+            tabUrl: async (tabId) => { const tab = await chrome.tabs.get(tabId); return tab.url; },
+            requestCredentials: async (request) => normalizeBrowserAuthCredentialResponse(await this.native.requestHost("host.browserAuth.request", request, 300_000).catch(() => ({ status: "unavailable" }))),
+            validateLocator: async (tabId, selector) => { try {
+                return await this.pw.operation(tabId, toLocatorAst(selector), "count", {}) === 1 && await this.pw.operation(tabId, toLocatorAst(selector), "isVisible", {}) && await this.pw.operation(tabId, toLocatorAst(selector), "isEnabled", {});
+            }
+            catch {
+                return false;
+            } },
+            fillField: (tabId, selector, value) => this.pw.operation(tabId, toLocatorAst(selector), "fill", { text: value }),
+            click: (tabId, selector) => this.pw.operation(tabId, toLocatorAst(selector), "click", {}),
+            press: (tabId, selector, key) => this.pw.operation(tabId, toLocatorAst(selector), "press", { key })
+        });
     }
     async ready() { await Promise.all([this.sessions.ready(), this.leases.ready()]); }
     async context(p) { const ctx = requireContext(p); await this.sessions.getOrCreate(ctx); return ctx; }
     async chromeTab(tabId, ctx) { return (await this.leases.get(tabId, ctx)).chromeTabId; }
     async showCursor(chromeTabId, x, y) { await injectScript(chromeTabId, "dist/extension/content/overlay.js").catch(() => undefined); await chrome.tabs.sendMessage(chromeTabId, { type: "LUME_CURSOR_MOVE", x, y }).catch(() => undefined); }
-    extensionCaps() { return { id: "chrome-extension", browserId: "chrome-extension", name: "Lume Chrome", type: "extension", clientType: "extension", protocolVersion: PROTOCOL_VERSION, generation: this.native.connectionGeneration(), metadata: {}, capabilities: { browser: [{ id: "visibility", description: "Show or hide the browser window." }, { id: "viewport", description: "Set or reset the browser viewport." }], tab: [{ id: "pageAssets", description: "Inventory and bundle rendered page assets." }, { id: "cdp", description: "Read buffered CDP events and send permitted CDP commands." }, { id: "botDetection", description: "Report bot detection or access-control blockers for this tab." }] }, apiSupportOverrides: { "Tabs.content": false, "Tab.content": false }, permissions: { debugger: "granted", nativeMessaging: "granted", tabs: "granted", tabGroups: "granted", scripting: "granted", history: chrome.history ? "optional" : "missing", downloads: chrome.downloads ? "granted" : "missing", bookmarks: chrome.bookmarks ? "optional" : "missing" }, features: { openTabs: "available", claimTab: "available", cdp: "available", cua: "available", dom_cua: "available", playwright: "limited", pageAssets: "available", tabGroups: "available", history: "limited", contentExport: "available", fileChooser: "available", downloads: "available" } }; }
+    extensionCaps() { return { id: "chrome-extension", browserId: "chrome-extension", name: "Lume Chrome", type: "extension", clientType: "extension", protocolVersion: PROTOCOL_VERSION, generation: this.native.connectionGeneration(), metadata: {}, capabilities: { browser: [{ id: "visibility", description: "Show or hide the browser window." }, { id: "viewport", description: "Set or reset the browser viewport." }], tab: [{ id: "pageAssets", description: "Inventory and bundle rendered page assets." }, { id: "cdp", description: "Read buffered CDP events and send permitted CDP commands." }, { id: "botDetection", description: "Report bot detection or access-control blockers for this tab." }, { id: "browserAuth", description: "Securely collect user credentials and fill validated login forms." }] }, apiSupportOverrides: { "Tabs.content": false, "Tab.content": false }, permissions: { debugger: "granted", nativeMessaging: "granted", tabs: "granted", tabGroups: "granted", scripting: "granted", history: chrome.history ? "optional" : "missing", downloads: chrome.downloads ? "granted" : "missing", bookmarks: chrome.bookmarks ? "optional" : "missing" }, features: { openTabs: "available", claimTab: "available", cdp: "available", cua: "available", dom_cua: "available", playwright: "limited", pageAssets: "available", tabGroups: "available", history: "limited", contentExport: "available", fileChooser: "available", downloads: "available", browserAuth: "available" } }; }
     async dispatch(req) {
         try {
             const p = req.params ?? {};
@@ -192,7 +207,7 @@ export class RuntimeDispatcher {
                 case "tab_cdp_events":
                     await this.cdpEvents.subscribe(await this.chromeTab(p.tabId, ctx), p.events ?? []);
                     return ok(req.id, undefined);
-                case "tab_dev_logs": return ok(req.id, this.cdp.logs(await this.chromeTab(p.tabId, ctx)));
+                case "tab_dev_logs": return ok(req.id, this.cdp.logs(await this.chromeTab(p.tabId, ctx), p.options ?? {}));
                 case "browser_viewport_set":
                     for (const t of await this.leases.listSessionTabs(ctx))
                         await this.cdp.setViewport(t.chromeTabId, p.options);
@@ -335,6 +350,7 @@ export class RuntimeDispatcher {
                     await this.leases.handoff([p.tabId], ctx);
                     this.native.notifyHost("browser.auth.handoff", { context: ctx, tabId: p.tabId, reason: p.reason });
                     return ok(req.id, undefined);
+                case "tab_browser_auth_request": return ok(req.id, await this.browserAuth.request(await this.chromeTab(p.tabId, ctx), { ...p.options, context: ctx, tabId: p.tabId }));
                 case "browser_auth":
                     this.native.notifyHost("browser.auth.request", { context: ctx, reason: p.reason });
                     return ok(req.id, undefined);
@@ -374,4 +390,17 @@ export class RuntimeDispatcher {
         }
     }
     async onTabRemoved(tabId) { await this.leases.onTabRemoved(tabId); await this.cdp.cleanup(tabId); this.chooser.cleanupTab(tabId); this.cdpEvents.cleanup(tabId); }
+}
+function toLocatorAst(selector) {
+    return typeof selector === "string" ? locatorAst({ kind: "css", selector }) : selector;
+}
+function normalizeBrowserAuthCredentialResponse(value) {
+    const input = value;
+    if (!input || typeof input.status !== "string")
+        return { status: "unavailable" };
+    if (input.status === "approved")
+        return { status: "approved", values: input.values ?? {} };
+    if (input.status === "declined" || input.status === "cancelled" || input.status === "unavailable" || input.status === "expired" || input.status === "origin_changed" || input.status === "page_changed" || input.status === "locator_invalid" || input.status === "submission_failed")
+        return { status: input.status };
+    return { status: "unavailable" };
 }

@@ -144,6 +144,59 @@ test("node_repl bridge auto-approves extension confirmation requests by default"
   await server.close();
 });
 
+test("node_repl bridge forwards browserAuth requests to a secure host callback", async () => {
+  const { createBrowserAppServer } = await import("../dist/client/setupNodeReplBrowserRuntime.js");
+  const server = await createBrowserAppServer({
+    port: 0,
+    browserAuth: async (request) => ({
+      status: "approved",
+      values: { password: request.origin === "https://accounts.example.test" ? "secret-value" : "" },
+    }),
+  });
+  const client = await connectRawWebSocket(server.url);
+
+  client.send({
+    jsonrpc: "2.0",
+    id: "auth-1",
+    method: "host.browserAuth.request",
+    params: {
+      origin: "https://accounts.example.test",
+      fields: [{ id: "password", label: "Password", type: "password" }],
+    },
+  });
+
+  assert.deepEqual(await client.nextJson(), {
+    jsonrpc: "2.0",
+    id: "auth-1",
+    result: { status: "approved", values: { password: "secret-value" } },
+  });
+
+  client.close();
+  await server.close();
+});
+
+test("node_repl bridge returns unavailable for browserAuth without a secure host callback", async () => {
+  const { createBrowserAppServer } = await import("../dist/client/setupNodeReplBrowserRuntime.js");
+  const server = await createBrowserAppServer({ port: 0 });
+  const client = await connectRawWebSocket(server.url);
+
+  client.send({
+    jsonrpc: "2.0",
+    id: "auth-1",
+    method: "host.browserAuth.request",
+    params: { origin: "https://accounts.example.test", fields: [] },
+  });
+
+  assert.deepEqual(await client.nextJson(), {
+    jsonrpc: "2.0",
+    id: "auth-1",
+    result: { status: "unavailable" },
+  });
+
+  client.close();
+  await server.close();
+});
+
 test("node_repl browser runtime setup reuses an existing bridge from globals", async () => {
   const { setupNodeReplBrowserRuntime } = await import("../dist/client/setupNodeReplBrowserRuntime.js");
   const globals = {};
