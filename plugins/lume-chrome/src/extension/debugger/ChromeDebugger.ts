@@ -5,14 +5,17 @@ export class ChromeDebugger {
   private attached = new Set<number>();
   private devLogs = new Map<number, unknown[]>();
   private inflight = new Map<number, number>();
+  private activeDialogs = new Map<number, { type: "alert" | "beforeunload" | "confirm" | "prompt"; message?: string; defaultValue?: string }>();
   constructor(){
     chrome.debugger.onEvent.addListener((source:any,method:string,params:any)=>{
       if(typeof source.tabId!=="number")return;
       const arr=this.devLogs.get(source.tabId)??[];arr.push({method,params,ts:Date.now()});if(arr.length>1000)arr.shift();this.devLogs.set(source.tabId,arr);
+      if(method==="Page.javascriptDialogOpening")this.activeDialogs.set(source.tabId,{type:params?.type??"alert",message:params?.message,defaultValue:params?.defaultPrompt});
+      if(method==="Page.javascriptDialogClosed")this.activeDialogs.delete(source.tabId);
       if(method==="Network.requestWillBeSent")this.inflight.set(source.tabId,(this.inflight.get(source.tabId)??0)+1);
       if(method==="Network.loadingFinished"||method==="Network.loadingFailed")this.inflight.set(source.tabId,Math.max(0,(this.inflight.get(source.tabId)??1)-1));
     });
-    chrome.debugger.onDetach.addListener((source:any)=>{if(typeof source.tabId==="number"){this.attached.delete(source.tabId);this.inflight.delete(source.tabId);}});
+    chrome.debugger.onDetach.addListener((source:any)=>{if(typeof source.tabId==="number"){this.attached.delete(source.tabId);this.inflight.delete(source.tabId);this.activeDialogs.delete(source.tabId);}});
   }
   async ensureAttached(tabId: number) {
     if (this.attached.has(tabId)) return;
@@ -34,6 +37,8 @@ export class ChromeDebugger {
     await this.ensureAttached(tabId);
     return await chrome.debugger.sendCommand({ tabId }, method, params) as T;
   }
+  getDialog(tabId:number){return this.activeDialogs.get(tabId);}
+  async handleDialog(tabId:number,options:{accept:boolean;promptText?:string}){await this.ensureAttached(tabId);await chrome.debugger.sendCommand({tabId},"Page.handleJavaScriptDialog",{accept:options.accept,...(options.promptText!==undefined?{promptText:options.promptText}:{})});this.activeDialogs.delete(tabId);}
   async screenshot(tabId: number, options: { format?: "png" | "jpeg"; quality?: number; fullPage?:boolean; clip?:{x:number;y:number;width:number;height:number} } = {}) {
     let clip=options.clip;
     if(options.fullPage&&!clip){const metrics=await this.send<any>(tabId,"Page.getLayoutMetrics");const s=metrics.cssContentSize??metrics.contentSize;clip={x:0,y:0,width:s.width,height:s.height};}
@@ -50,5 +55,5 @@ export class ChromeDebugger {
   async navigateHistory(tabId:number,direction:-1|1){const history=await this.send<any>(tabId,"Page.getNavigationHistory");const index=history.currentIndex+direction;const entry=history.entries[index];if(!entry)return;await this.send(tabId,"Page.navigateToHistoryEntry",{entryId:entry.id},{allowMutating:true});}
   async waitForNetworkIdle(tabId:number,timeoutMs=10_000,idleMs=500){await this.ensureAttached(tabId);const start=Date.now();let idleStart=0;while(Date.now()-start<timeoutMs){if((this.inflight.get(tabId)??0)===0){if(!idleStart)idleStart=Date.now();if(Date.now()-idleStart>=idleMs)return;}else idleStart=0;await new Promise(r=>setTimeout(r,100));}throw new Error("Timed out waiting for network idle");}
   logs(tabId:number){return this.devLogs.get(tabId)??[];}
-  cleanup(tabId:number){this.devLogs.delete(tabId);this.inflight.delete(tabId);return this.detach(tabId);}
+  cleanup(tabId:number){this.devLogs.delete(tabId);this.inflight.delete(tabId);this.activeDialogs.delete(tabId);return this.detach(tabId);}
 }

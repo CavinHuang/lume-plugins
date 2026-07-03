@@ -97,6 +97,8 @@ export class RuntimeDispatcher {
         case"tab_id":{const l=await this.leases.get(p.tabId,ctx!);const tab=await chrome.tabs.get(l.chromeTabId);return ok(req.id,{tabId:l.tabId,chromeTabId:l.chromeTabId,url:tab.url,title:tab.title});}
         case"tab_title":return ok(req.id,(await chrome.tabs.get(await this.chromeTab(p.tabId,ctx!))).title);
         case"tab_url":return ok(req.id,(await chrome.tabs.get(await this.chromeTab(p.tabId,ctx!))).url);
+        case"tab_js_dialog_get":return ok(req.id,this.cdp.getDialog(await this.chromeTab(p.tabId,ctx!)));
+        case"tab_js_dialog_handle":await this.cdp.handleDialog(await this.chromeTab(p.tabId,ctx!),{accept:p.accept===true,promptText:p.promptText});return ok(req.id,undefined);
         case"navigate_tab_url":{await this.confirmations.ensureAllowed({kind:"navigate",url:p.url,source:"agent",description:`Navigate to ${p.url}`},ctx!);const id=await this.chromeTab(p.tabId,ctx!);await chrome.tabs.update(id,{url:p.url,active:true});if(p.options?.waitUntil)await this.pw.waitForLoadState(id,p.options.waitUntil,p.options.timeoutMs??15_000);return ok(req.id,undefined);}
         case"navigate_tab_back":await this.cdp.navigateHistory(await this.chromeTab(p.tabId,ctx!),-1);return ok(req.id,undefined);
         case"navigate_tab_forward":await this.cdp.navigateHistory(await this.chromeTab(p.tabId,ctx!),1);return ok(req.id,undefined);
