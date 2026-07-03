@@ -63,16 +63,17 @@ selected backend descriptor rather than exposed as callable placeholders.
 | Object | Implemented methods |
 | --- | --- |
 | `browser.tabs` | `new()`, `get()`, `selected()`, `list()`, `sessionTabs()`, `finalize()`, `release()`, `handoff()`, `resumeHandoff()` |
-| `tab` | `close()`, `title()`, `url()`, `goto()`, `back()`, `forward()`, `reload()`, `screenshot()`, `exportContent()` |
+| `tab` | `close()`, `title()`, `url()`, `goto()`, `back()`, `forward()`, `reload()`, `screenshot()`, `getJsDialog()`, `markDeliverable()`, `markHandoff()`, `exportContent()` |
+| `tab.content` | `export()`, `exportGsuite(type)` |
 | `tab.capabilities` | `list()`, `get()` |
 | `tab.capabilities.pageAssets` | `list()`, `bundle()`, `documentation()` |
 | `tab.clipboard` | `read()`, `readText()`, `write()`, `writeText()` |
 | `tab.dev` | `cdpCall()`, `subscribe()`, `logs()` |
 
-Codex canonical `Tab.content`, `Tab.getJsDialog()`, `Tab.markDeliverable()`, and
-`Tab.markHandoff()` are currently dynamically hidden in the extension
-descriptor. Use `tab.exportContent()` and `browser.tabs.finalize()` until the
-canonical object shape is implemented.
+Canonical `tab.content.export()`, `tab.content.exportGsuite(type)`,
+`tab.getJsDialog()`, `tab.markDeliverable()`, and `tab.markHandoff()` are
+implemented by the extension backend. `browser.tabs.content()` remains hidden
+because temporary background extraction is not implemented.
 
 ## Implemented Optional Capabilities
 
@@ -81,6 +82,8 @@ canonical object shape is implemented.
 | `visibility` | browser | `await browser.capabilities.get("visibility")` |
 | `viewport` | browser | `await browser.capabilities.get("viewport")` |
 | `pageAssets` | tab | `await tab.capabilities.get("pageAssets")` |
+| `cdp` | tab | `await tab.capabilities.get("cdp")` |
+| `botDetection` | tab | `await tab.capabilities.get("botDetection")` |
 
 A capability can be obtained only when the backend advertises it and the client
 has a callable definition for it.
@@ -91,7 +94,7 @@ Canonical method names include `locator.readAll()` and all methods in the table.
 
 | Object | Implemented methods |
 | --- | --- |
-| `tab.playwright` | `domSnapshot()`, `evaluate()`, `expectNavigation()`, `frameLocator()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()`, `waitForURL()`, `waitForLoadState()`, `waitForTimeout()`, `waitForEvent()` |
+| `tab.playwright` | `domSnapshot()`, `evaluate()`, `elementInfo()`, `elementScreenshot()`, `expectNavigation()`, `frameLocator()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()`, `waitForURL()`, `waitForLoadState()`, `waitForTimeout()`, `waitForEvent()` |
 | `locator` composition | `first()`, `last()`, `nth()`, `filter()`, `and()`, `or()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()` |
 | `locator` actions | `click()`, `dblclick()`, `fill()`, `press()`, `type()`, `selectOption()`, `setChecked()`, `check()`, `uncheck()`, `waitFor()`, `downloadMedia()` |
 | `locator` readers | `getAttribute()`, `innerText()`, `textContent()`, `inputValue()`, `isVisible()`, `isEnabled()`, `isChecked()`, `count()`, `allTextContents()`, `readAll()`, `all()` |
@@ -105,9 +108,7 @@ flows.
 
 | Capability | Status | Reason |
 | --- | --- | --- |
-| `browserAuth` | unavailable | Secure credential handoff needs a separate Lume interruption flow. |
-| `botDetection` | unavailable | Reporting storage and host policy are not implemented. |
-| `cdp` | unavailable | Low-level `tab.dev` helpers exist, but the Codex capability object (`send`, `readEvents`) is not conformant yet. |
+| `browserAuth` | deferred | Secure credential handoff needs a separate Lume interruption flow and trusted credential UI. |
 
 ## CUA
 

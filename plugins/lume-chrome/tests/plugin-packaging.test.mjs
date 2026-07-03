@@ -90,6 +90,10 @@ test("browser API matrix documents the public surface", async () => {
   assert.match(matrix, /visibility/);
   assert.match(matrix, /viewport/);
   assert.match(matrix, /pageAssets/);
+  assert.match(matrix, /tab\.content\.export\(\)/);
+  assert.match(matrix, /tab\.getJsDialog\(\)/);
+  assert.match(matrix, /tab\.capabilities\.get\("cdp"\)/);
+  assert.match(matrix, /tab\.capabilities\.get\("botDetection"\)/);
   assert.match(matrix, /downloadMedia/);
   assert.match(matrix, /tab\.playwright/);
   assert.match(matrix, /waitForEvent/);
@@ -97,7 +101,6 @@ test("browser API matrix documents the public surface", async () => {
   assert.match(matrix, /download/);
   assert.match(matrix, /Unavailable Codex Capabilities/);
   assert.match(matrix, /browserAuth/);
-  assert.match(matrix, /botDetection/);
-  assert.match(matrix, /cdp/);
+  assert.match(matrix, /deferred/);
   assert.doesNotMatch(matrix, /webmcp.*implemented/i);
 });

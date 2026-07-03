@@ -55,16 +55,13 @@ test("runtime descriptor advertises only implemented extension capabilities", as
       ],
       tab: [
         { id: "pageAssets", description: "Inventory and bundle rendered page assets." },
+        { id: "cdp", description: "Read buffered CDP events and send permitted CDP commands." },
+        { id: "botDetection", description: "Report bot detection or access-control blockers for this tab." },
       ],
     },
     apiSupportOverrides: {
       "Tabs.content": false,
       "Tab.content": false,
-      "Tab.getJsDialog": false,
-      "Tab.markDeliverable": false,
-      "Tab.markHandoff": false,
-      "ContentAPI.export": false,
-      "ContentAPI.exportGsuite": false,
     },
     permissions: {
       debugger: "granted",
@@ -121,6 +118,20 @@ test("runtime capability commands match the advertised descriptor surface", asyn
       description: "Inventory and bundle rendered page assets.",
       state: "available",
     },
+    {
+      id: "cdp",
+      name: "CDP",
+      scope: "tab",
+      description: "Read buffered CDP events and send permitted CDP commands.",
+      state: "available",
+    },
+    {
+      id: "botDetection",
+      name: "Bot detection",
+      scope: "tab",
+      description: "Report bot detection or access-control blockers for this tab.",
+      state: "available",
+    },
   ]);
   assert.match(
     await dispatch(dispatcher, "browser_capability_documentation", { capabilityId: "visibility" }),
@@ -129,6 +140,14 @@ test("runtime capability commands match the advertised descriptor surface", asyn
   assert.match(
     await dispatch(dispatcher, "tab_capability_documentation", { capabilityId: "pageAssets" }),
     /bundle/,
+  );
+  assert.match(
+    await dispatch(dispatcher, "tab_capability_documentation", { capabilityId: "cdp" }),
+    /readEvents/,
+  );
+  assert.match(
+    await dispatch(dispatcher, "tab_capability_documentation", { capabilityId: "botDetection" }),
+    /report/,
   );
 });
 
