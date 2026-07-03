@@ -90,6 +90,30 @@ test("cdp capability sends commands and reads events for a tab", async () => {
   ]);
 });
 
+test("botDetection capability reports a reason for a tab", async () => {
+  const transport = makeTransport();
+  const collection = new CapabilityCollection({
+    advertised: [{ id: "botDetection", description: "Bot detection" }],
+    browserId: "chrome-1",
+    definitions: createCapabilityDefinitions(),
+    scope: "tab",
+    tabId: "42",
+    transport,
+  });
+
+  const botDetection = await collection.get("botDetection");
+  await botDetection.report({ reason: "access_denied" });
+
+  assert.deepEqual(transport.calls.at(-1), {
+    method: "tab_bot_detection_report",
+    params: {
+      browserId: "chrome-1",
+      tabId: "42",
+      reason: "access_denied",
+    },
+  });
+});
+
 test("unknown and internal capabilities are unavailable", async () => {
   const collection = new CapabilityCollection({
     advertised: [{ id: "webmcp", description: "internal" }],

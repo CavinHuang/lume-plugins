@@ -191,3 +191,37 @@ test("dispatcher sends CDP commands and reads buffered events", async () => {
     truncated: false,
   });
 });
+
+test("dispatcher reports bot detection with hostname only", async () => {
+  const { dispatcher, chrome, native } = await createDispatcherHarness();
+  dispatcher.leases.get = async () => ({ chromeTabId: 101 });
+  chrome.tabs.get.resolves({
+    id: 101,
+    url: "https://accounts.example.test/challenge?token=secret",
+    title: "Blocked",
+  });
+
+  const report = await dispatcher.dispatch({
+    jsonrpc: "2.0",
+    id: "bot-report-1",
+    method: "tab_bot_detection_report",
+    params: { tabId: "lume-tab:1", reason: "captcha_failed" },
+  });
+
+  assert.deepEqual(report.result, {
+    hostname: "accounts.example.test",
+    status: "reported",
+  });
+  assert.deepEqual(native.notifications, [
+    {
+      method: "browser.botDetection.report",
+      params: {
+        context: undefined,
+        tabId: "lume-tab:1",
+        hostname: "accounts.example.test",
+        reason: "captcha_failed",
+      },
+    },
+  ]);
+  assert.equal(JSON.stringify(native.notifications).includes("token=secret"), false);
+});

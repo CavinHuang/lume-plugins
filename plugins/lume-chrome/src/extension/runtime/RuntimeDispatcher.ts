@@ -107,6 +107,7 @@ export class RuntimeDispatcher {
         case"tab_cdp_call":return ok(req.id,await this.cdp.send(await this.chromeTab(p.tabId,ctx!),p.method,p.params??{},{allowMutating:p.allowMutating===true}));
         case"tab_cdp_send":return ok(req.id,await this.cdp.sendRaw(await this.chromeTab(p.tabId,ctx!),p.method,p.params??{},p.options??{}));
         case"tab_cdp_read_events":return ok(req.id,await this.cdp.readEvents(await this.chromeTab(p.tabId,ctx!),p.options??{}));
+        case"tab_bot_detection_report":{const reasons=["captcha_failed","access_denied","challenge_loop","unexpected_bot_error"];if(!reasons.includes(p.reason))throw new Error(`Invalid bot detection reason: ${String(p.reason)}`);const tab=await chrome.tabs.get(await this.chromeTab(p.tabId,ctx!));let hostname:string|null=null;try{hostname=tab.url?new URL(tab.url).hostname:null;}catch{hostname=null;}this.native.notifyHost("browser.botDetection.report",{context:ctx,tabId:p.tabId,hostname,reason:p.reason});return ok(req.id,{hostname,status:"reported"});}
         case"tab_cdp_events":await this.cdpEvents.subscribe(await this.chromeTab(p.tabId,ctx!),p.events??[]);return ok(req.id,undefined);
         case"tab_dev_logs":return ok(req.id,this.cdp.logs(await this.chromeTab(p.tabId,ctx!)));
         case"browser_viewport_set":for(const t of await this.leases.listSessionTabs(ctx!))await this.cdp.setViewport(t.chromeTabId,p.options);return ok(req.id,undefined);
