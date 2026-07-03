@@ -124,8 +124,8 @@ export class RuntimeDispatcher {
         case"dom_cua_scroll":await this.dom.scroll(await this.chromeTab(p.tabId,ctx!),p.node_id,p.deltaY??400,p.deltaX??0);return ok(req.id,undefined);
         case"playwright_dom_snapshot":return ok(req.id,await this.pw.domSnapshot(await this.chromeTab(p.tabId,ctx!)));
         case"playwright_evaluate":return ok(req.id,await this.pw.evaluate(await this.chromeTab(p.tabId,ctx!),p.expression,p.arg));
-        case"playwright_element_info":return ok(req.id,await this.pw.operation(await this.chromeTab(p.tabId,ctx!),p.locator,"elementInfo",p));
-        case"playwright_element_screenshot":return ok(req.id,await this.pw.elementScreenshot(await this.chromeTab(p.tabId,ctx!),p.locator,p.options??{}));
+        case"playwright_element_info":return ok(req.id,await this.pw.elementInfoAtPoint(await this.chromeTab(p.tabId,ctx!),p.options??p));
+        case"playwright_element_screenshot":return ok(req.id,await this.pw.elementScreenshotAtPoint(await this.chromeTab(p.tabId,ctx!),p.options??p));
         case"playwright_wait_for_url":await this.pw.waitForURL(await this.chromeTab(p.tabId,ctx!),p.url,p.options?.timeoutMs??10_000);return ok(req.id,undefined);
         case"playwright_wait_for_load_state":await this.pw.waitForLoadState(await this.chromeTab(p.tabId,ctx!),p.state??"load",p.timeoutMs??10_000);return ok(req.id,undefined);
         case"playwright_wait_for_timeout":await new Promise(r=>setTimeout(r,Math.min(Number(p.timeoutMs??0),30_000)));return ok(req.id,undefined);

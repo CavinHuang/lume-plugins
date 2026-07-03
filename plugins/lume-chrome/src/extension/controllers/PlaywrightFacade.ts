@@ -1,5 +1,5 @@
 import { evalInPage } from "./PageScript";
-import type { DomSnapshot, LocatorState } from "../../shared/protocol";
+import type { CoordinateElementInfo, DomSnapshot, LocatorState } from "../../shared/protocol";
 import type { LocatorAst } from "../../shared/locator";
 import type { ChromeDebugger } from "../debugger/ChromeDebugger";
 
@@ -97,6 +97,21 @@ export class PlaywrightFacade {
   }
   operation<T=unknown>(tabId:number,ast:LocatorAst,operation:string,payload:any={}):Promise<T>{return locatorOperation<T>(tabId,ast,operation,payload);}
   async elementScreenshot(tabId:number,ast:LocatorAst,options:any={}){const info=await this.operation<any>(tabId,ast,"elementInfo",options);return this.cdp.screenshot(tabId,{...options,clip:info.rect});}
+  async elementInfoAtPoint(tabId:number,options:{x:number;y:number;includeNonInteractable?:boolean}):Promise<CoordinateElementInfo[]>{
+    if(!Number.isFinite(options.x)||!Number.isFinite(options.y))throw new Error("playwright.elementInfo requires numeric x and y coordinates");
+    return evalInPage(tabId,(x,y,includeNonInteractable)=>{
+      type Info = CoordinateElementInfo;
+      const normalize=(value:string)=>value.replace(/\s+/g," ").trim();
+      const visible=(el:Element)=>{const r=(el as HTMLElement).getBoundingClientRect();const s=getComputedStyle(el);return r.width>0&&r.height>0&&s.display!=="none"&&s.visibility!=="hidden"&&Number(s.opacity||1)>0;};
+      const role=(el:Element)=>el.getAttribute("role")||({A:"link",BUTTON:"button",INPUT:(el as HTMLInputElement).type==="checkbox"?"checkbox":(el as HTMLInputElement).type==="radio"?"radio":"textbox",TEXTAREA:"textbox",SELECT:"combobox",IMG:"img",OPTION:"option"} as Record<string,string>)[el.tagName]||"generic";
+      const ariaName=(el:Element)=>el.getAttribute("aria-label")||el.getAttribute("title")||el.getAttribute("alt")||null;
+      const escape=(value:string)=>globalThis.CSS?.escape?CSS.escape(value):value.replace(/["\\]/g,"\\$&");
+      const selector=(el:Element)=>{const candidates:string[]=[];const id=el.getAttribute("id");const testId=el.getAttribute("data-testid");if(id)candidates.push(`#${escape(id)}`);if(testId)candidates.push(`[data-testid="${escape(testId)}"]`);candidates.push(el.tagName.toLowerCase());return{primary:candidates[0]??null,candidates};};
+      const elements=(document.elementsFromPoint?.(x,y)??[document.elementFromPoint(x,y)]).filter((el):el is Element=>el instanceof Element);
+      return elements.filter(el=>includeNonInteractable||visible(el)).slice(0,20).map((el):Info=>{const r=(el as HTMLElement).getBoundingClientRect();return{tagName:el.tagName,role:role(el),ariaName:ariaName(el),visibleText:normalize((el as HTMLElement).innerText||el.textContent||"")||null,testId:el.getAttribute("data-testid"),boundingBox:{x:r.x,y:r.y,width:r.width,height:r.height},selector:selector(el)};});
+    },[options.x,options.y,options.includeNonInteractable===true]);
+  }
+  async elementScreenshotAtPoint(tabId:number,options:{x:number;y:number;includeNonInteractable?:boolean}){const info=(await this.elementInfoAtPoint(tabId,options))[0];if(!info?.boundingBox)throw new Error("No element found at coordinate");return this.cdp.screenshot(tabId,{...options,clip:info.boundingBox});}
   async waitForURL(tabId:number,url:string,timeoutMs=10_000){const start=Date.now();while(Date.now()-start<timeoutMs){const tab=await chrome.tabs.get(tabId);if(tab.url===url||tab.url?.includes(url))return;await new Promise(r=>setTimeout(r,100));}throw new Error(`Timed out waiting for URL: ${url}`);}
   async waitForLoadState(tabId:number,state="load",timeoutMs=10_000){
     if(state==="networkidle"){await this.cdp.waitForNetworkIdle(tabId,timeoutMs);return;}
