@@ -53,6 +53,43 @@ test("tab capability carries browser and tab identity", async () => {
   assert.deepEqual(transport.calls.at(-1).params, { browserId: "chrome-1", tabId: "42" });
 });
 
+test("cdp capability sends commands and reads events for a tab", async () => {
+  const transport = makeTransport();
+  const collection = new CapabilityCollection({
+    advertised: [{ id: "cdp", description: "CDP" }],
+    browserId: "chrome-1",
+    definitions: createCapabilityDefinitions(),
+    scope: "tab",
+    tabId: "42",
+    transport,
+  });
+
+  const cdp = await collection.get("cdp");
+  await cdp.send("Runtime.evaluate", { expression: "location.href" }, { timeoutMs: 1000 });
+  await cdp.readEvents({ afterSequence: 3, methods: ["Runtime.consoleAPICalled"], limit: 5 });
+
+  assert.deepEqual(transport.calls.slice(-2), [
+    {
+      method: "tab_cdp_send",
+      params: {
+        browserId: "chrome-1",
+        tabId: "42",
+        method: "Runtime.evaluate",
+        params: { expression: "location.href" },
+        options: { timeoutMs: 1000 },
+      },
+    },
+    {
+      method: "tab_cdp_read_events",
+      params: {
+        browserId: "chrome-1",
+        tabId: "42",
+        options: { afterSequence: 3, methods: ["Runtime.consoleAPICalled"], limit: 5 },
+      },
+    },
+  ]);
+});
+
 test("unknown and internal capabilities are unavailable", async () => {
   const collection = new CapabilityCollection({
     advertised: [{ id: "webmcp", description: "internal" }],

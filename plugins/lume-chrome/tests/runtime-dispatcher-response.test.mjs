@@ -133,3 +133,61 @@ test("dispatcher exposes active JavaScript dialogs and handles them", async () =
   });
   assert.equal(closed.result, null);
 });
+
+test("dispatcher sends CDP commands and reads buffered events", async () => {
+  const { dispatcher, chrome } = await createDispatcherHarness();
+  dispatcher.leases.get = async () => ({ chromeTabId: 101 });
+  chrome.debugger.sendCommand.resolves({ value: "visible" });
+
+  const sent = await dispatcher.dispatch({
+    jsonrpc: "2.0",
+    id: "cdp-send-1",
+    method: "tab_cdp_send",
+    params: {
+      tabId: "lume-tab:1",
+      method: "Runtime.evaluate",
+      params: { expression: "document.visibilityState" },
+    },
+  });
+  assert.deepEqual(sent.result, { value: "visible" });
+  assert.deepEqual(chrome.debugger.sendCommand.lastCall.args, [
+    { tabId: 101 },
+    "Runtime.evaluate",
+    { expression: "document.visibilityState" },
+  ]);
+
+  chrome.debugger.emitEvent({ tabId: 101 }, "Network.requestWillBeSent", {
+    requestId: "request-1",
+  });
+  const current = await dispatcher.dispatch({
+    jsonrpc: "2.0",
+    id: "cdp-events-current",
+    method: "tab_cdp_read_events",
+    params: { tabId: "lume-tab:1", options: {} },
+  });
+  assert.equal(current.result.events.length, 0);
+  assert.equal(current.result.cursor, 1);
+
+  const read = await dispatcher.dispatch({
+    jsonrpc: "2.0",
+    id: "cdp-events-read",
+    method: "tab_cdp_read_events",
+    params: {
+      tabId: "lume-tab:1",
+      options: { afterSequence: 0, limit: 1, methods: ["Network.requestWillBeSent"] },
+    },
+  });
+  assert.deepEqual(read.result, {
+    cursor: 1,
+    events: [
+      {
+        method: "Network.requestWillBeSent",
+        params: { requestId: "request-1" },
+        sequence: 1,
+        source: { tabId: 101 },
+      },
+    ],
+    hasMore: false,
+    truncated: false,
+  });
+});

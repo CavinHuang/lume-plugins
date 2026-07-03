@@ -1,21 +1,26 @@
 import { BrowserRuntimeException, BrowserErrorCodes } from "../../shared/errors";
 import { MUTATING_CDP_METHODS, READ_ONLY_CDP_METHODS } from "../../shared/commands";
+import type { CdpBufferedEvent, CdpReadEventsResult } from "../../shared/protocol";
 
 export class ChromeDebugger {
   private attached = new Set<number>();
   private devLogs = new Map<number, unknown[]>();
+  private cdpEvents = new Map<number, CdpBufferedEvent[]>();
+  private cdpSequence = 0;
   private inflight = new Map<number, number>();
   private activeDialogs = new Map<number, { type: "alert" | "beforeunload" | "confirm" | "prompt"; message?: string; defaultValue?: string }>();
   constructor(){
     chrome.debugger.onEvent.addListener((source:any,method:string,params:any)=>{
       if(typeof source.tabId!=="number")return;
+      const event:CdpBufferedEvent={method,params,sequence:++this.cdpSequence,source:{...(source.extensionId?{extensionId:source.extensionId}:{}),...(source.sessionId?{sessionId:source.sessionId}:{}),tabId:source.tabId,...(source.targetId?{targetId:source.targetId}:{})}};
+      const events=this.cdpEvents.get(source.tabId)??[];events.push(event);if(events.length>1000)events.shift();this.cdpEvents.set(source.tabId,events);
       const arr=this.devLogs.get(source.tabId)??[];arr.push({method,params,ts:Date.now()});if(arr.length>1000)arr.shift();this.devLogs.set(source.tabId,arr);
       if(method==="Page.javascriptDialogOpening")this.activeDialogs.set(source.tabId,{type:params?.type??"alert",message:params?.message,defaultValue:params?.defaultPrompt});
       if(method==="Page.javascriptDialogClosed")this.activeDialogs.delete(source.tabId);
       if(method==="Network.requestWillBeSent")this.inflight.set(source.tabId,(this.inflight.get(source.tabId)??0)+1);
       if(method==="Network.loadingFinished"||method==="Network.loadingFailed")this.inflight.set(source.tabId,Math.max(0,(this.inflight.get(source.tabId)??1)-1));
     });
-    chrome.debugger.onDetach.addListener((source:any)=>{if(typeof source.tabId==="number"){this.attached.delete(source.tabId);this.inflight.delete(source.tabId);this.activeDialogs.delete(source.tabId);}});
+    chrome.debugger.onDetach.addListener((source:any)=>{if(typeof source.tabId==="number"){this.attached.delete(source.tabId);this.inflight.delete(source.tabId);this.activeDialogs.delete(source.tabId);this.cdpEvents.delete(source.tabId);}});
   }
   async ensureAttached(tabId: number) {
     if (this.attached.has(tabId)) return;
@@ -37,6 +42,8 @@ export class ChromeDebugger {
     await this.ensureAttached(tabId);
     return await chrome.debugger.sendCommand({ tabId }, method, params) as T;
   }
+  async sendRaw(tabId:number,method:string,params:Record<string,unknown>={},options:{target?:{sessionId?:string;targetId?:string};timeoutMs?:number}={}):Promise<unknown>{await this.ensureAttached(tabId);const target=options.target?.targetId?{targetId:options.target.targetId}:options.target?.sessionId?{tabId,sessionId:options.target.sessionId}:{tabId};const command=chrome.debugger.sendCommand(target,method,params);if(!options.timeoutMs)return command;return await Promise.race([command,new Promise((_,reject)=>setTimeout(()=>reject(new Error(`Timed out waiting for CDP command: ${method}`)),options.timeoutMs))]);}
+  async readEvents(tabId:number,options:{afterSequence?:number;limit?:number;methods?:string[];target?:{sessionId?:string;targetId?:string};timeoutMs?:number}={}):Promise<CdpReadEventsResult>{const current=this.cdpEvents.get(tabId)?.at(-1)?.sequence??this.cdpSequence;if(options.afterSequence===undefined)return{cursor:current,events:[],hasMore:false,truncated:false};if(options.methods&&options.methods.length===0)throw new Error("cdp.readEvents methods must not be empty");const after=Number(options.afterSequence);const limit=Math.max(1,Math.min(Number(options.limit??100),1000));const methods=options.methods?new Set(options.methods):undefined;const target=options.target;const matching=()=>{const events=this.cdpEvents.get(tabId)??[];return events.filter(e=>e.sequence>after&&(!methods||methods.has(e.method))&&(!target||(target.sessionId?e.source.sessionId===target.sessionId:e.source.targetId===target.targetId)));};const start=Date.now();let found=matching();while(found.length===0&&options.timeoutMs&&Date.now()-start<options.timeoutMs){await new Promise(r=>setTimeout(r,50));found=matching();}const page=found.slice(0,limit);const earliest=(this.cdpEvents.get(tabId)??[])[0]?.sequence;return{cursor:page.at(-1)?.sequence??after,events:page,hasMore:found.length>page.length,truncated:earliest!==undefined&&after<earliest-1};}
   getDialog(tabId:number){return this.activeDialogs.get(tabId);}
   async handleDialog(tabId:number,options:{accept:boolean;promptText?:string}){await this.ensureAttached(tabId);await chrome.debugger.sendCommand({tabId},"Page.handleJavaScriptDialog",{accept:options.accept,...(options.promptText!==undefined?{promptText:options.promptText}:{})});this.activeDialogs.delete(tabId);}
   async screenshot(tabId: number, options: { format?: "png" | "jpeg"; quality?: number; fullPage?:boolean; clip?:{x:number;y:number;width:number;height:number} } = {}) {
@@ -55,5 +62,5 @@ export class ChromeDebugger {
   async navigateHistory(tabId:number,direction:-1|1){const history=await this.send<any>(tabId,"Page.getNavigationHistory");const index=history.currentIndex+direction;const entry=history.entries[index];if(!entry)return;await this.send(tabId,"Page.navigateToHistoryEntry",{entryId:entry.id},{allowMutating:true});}
   async waitForNetworkIdle(tabId:number,timeoutMs=10_000,idleMs=500){await this.ensureAttached(tabId);const start=Date.now();let idleStart=0;while(Date.now()-start<timeoutMs){if((this.inflight.get(tabId)??0)===0){if(!idleStart)idleStart=Date.now();if(Date.now()-idleStart>=idleMs)return;}else idleStart=0;await new Promise(r=>setTimeout(r,100));}throw new Error("Timed out waiting for network idle");}
   logs(tabId:number){return this.devLogs.get(tabId)??[];}
-  cleanup(tabId:number){this.devLogs.delete(tabId);this.inflight.delete(tabId);this.activeDialogs.delete(tabId);return this.detach(tabId);}
+  cleanup(tabId:number){this.devLogs.delete(tabId);this.cdpEvents.delete(tabId);this.inflight.delete(tabId);this.activeDialogs.delete(tabId);return this.detach(tabId);}
 }
