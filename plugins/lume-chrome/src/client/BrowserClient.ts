@@ -1,6 +1,7 @@
 import type {
-  BrowserBackendDescriptor, BrowserClientType, BrowserCommandType, BrowserContext, DiagnosticsReport, DomSnapshot,
-  DownloadInfo, FileChooserInfo, FinalizeTabKeep, LocatorPayload, RpcRequest, RpcResponse,
+  BrowserBackendDescriptor, BrowserClientType, BrowserCommandType, BrowserContext, CoordinateElementInfo,
+  DiagnosticsReport, DomSnapshot, DownloadInfo, FileChooserInfo, FinalizeTabKeep, JsDialogInfo, LocatorPayload,
+  RpcRequest, RpcResponse,
   SessionTabInfo, SitePermissionRecord, UserTabInfo, VisibleDomNode
 } from "../shared/protocol";
 import { appendLocator, locatorAst, type LocatorAst, type LocatorStep, type TextMatcher } from "../shared/locator";
@@ -371,6 +372,13 @@ export class Tab {
   back(): Promise<void> { return this.t.send("navigate_tab_back", { context: this.ctx, tabId: this.id }); }
   forward(): Promise<void> { return this.t.send("navigate_tab_forward", { context: this.ctx, tabId: this.id }); }
   reload(): Promise<void> { return this.t.send("navigate_tab_reload", { context: this.ctx, tabId: this.id }); }
+  async getJsDialog(): Promise<AlertDialog | BeforeUnloadDialog | ConfirmDialog | PromptDialog | undefined> {
+    const info = await this.t.send<JsDialogInfo | undefined>("tab_js_dialog_get", {
+      context: this.ctx,
+      tabId: this.id,
+    });
+    return info ? createDialog(this.t, this.ctx, this.id, info) : undefined;
+  }
   screenshot(options: { fullPage?: boolean; format?: "png" | "jpeg"; quality?: number; clip?: {x:number;y:number;width:number;height:number} } = {}): Promise<Uint8Array> {
     return this.t.send<{ dataBase64: string }>("tab_screenshot", { context: this.ctx, tabId: this.id, options })
       .then((result) => Uint8Array.from(atob(result.dataBase64), c => c.charCodeAt(0)));
@@ -387,6 +395,36 @@ export class Tab {
   }
 }
 
+type DialogHandleOptions = { accept: boolean; promptText?: string };
+type AlertDialog = JsDialogInfo & { type: "alert"; dismiss(): Promise<void> };
+type BeforeUnloadDialog = JsDialogInfo & { type: "beforeunload"; dismiss(): Promise<void> };
+type ConfirmDialog = JsDialogInfo & { type: "confirm"; accept(): Promise<void>; dismiss(): Promise<void> };
+type PromptDialog = JsDialogInfo & { type: "prompt"; accept(text: string): Promise<void>; dismiss(): Promise<void> };
+
+function createDialog(
+  t: BrowserTransport,
+  ctx: BrowserContext,
+  tabId: string,
+  info: JsDialogInfo,
+): AlertDialog | BeforeUnloadDialog | ConfirmDialog | PromptDialog {
+  const handle = (options: DialogHandleOptions) => t.send("tab_js_dialog_handle", {
+    context: ctx,
+    tabId,
+    ...options,
+  });
+  const base = {
+    ...info,
+    dismiss: () => handle({ accept: false }),
+  };
+  if (info.type === "confirm") {
+    return { ...base, accept: () => handle({ accept: true }) } as ConfirmDialog;
+  }
+  if (info.type === "prompt") {
+    return { ...base, accept: (text: string) => handle({ accept: true, promptText: text }) } as PromptDialog;
+  }
+  return base as AlertDialog | BeforeUnloadDialog;
+}
+
 class ContentAPI {
   constructor(private readonly t: BrowserTransport, private readonly ctx: BrowserContext, private readonly tabId: string) {}
   async export(): Promise<string> {
@@ -394,6 +432,14 @@ class ContentAPI {
       context: this.ctx,
       tabId: this.tabId,
       options: { format: "markdown" },
+    });
+    return result.path ?? result.assetId;
+  }
+  async exportGsuite(type: "pdf" | "md" | "xlsx" | "csv" | "docx" | "pptx"): Promise<string> {
+    const result = await this.t.send<{ assetId: string; path?: string }>("tab_content_export_gsuite", {
+      context: this.ctx,
+      tabId: this.tabId,
+      type,
     });
     return result.path ?? result.assetId;
   }
@@ -476,6 +522,20 @@ export class PlaywrightAPI extends PlaywrightFrameLocator {
   waitForURL(url:string, options:{timeoutMs?:number}={}): Promise<void> { return this.t.send("playwright_wait_for_url", { context:this.ctx, tabId:this.tabId, url, options }); }
   waitForLoadState(options:{state?:"load"|"domcontentloaded"|"networkidle";timeoutMs?:number}={}): Promise<void> { return this.t.send("playwright_wait_for_load_state", { context:this.ctx, tabId:this.tabId, ...options }); }
   waitForTimeout(timeoutMs:number): Promise<void> { return this.t.send("playwright_wait_for_timeout", { context:this.ctx, tabId:this.tabId, timeoutMs }); }
+  elementInfo(options: { x: number; y: number; includeNonInteractable?: boolean }): Promise<CoordinateElementInfo[]> {
+    return this.t.send("playwright_element_info", {
+      context: this.ctx,
+      tabId: this.tabId,
+      options,
+    });
+  }
+  elementScreenshot(options: { x: number; y: number; includeNonInteractable?: boolean }): Promise<Uint8Array> {
+    return this.t.send<{ dataBase64: string }>("playwright_element_screenshot", {
+      context: this.ctx,
+      tabId: this.tabId,
+      options,
+    }).then((result) => Uint8Array.from(atob(result.dataBase64), c => c.charCodeAt(0)));
+  }
   async waitForEvent(event:"download"|"filechooser", options:{timeoutMs?:number}={}): Promise<PlaywrightDownload | PlaywrightFileChooser> {
     if (event === "download") {
       const info = await this.t.send<DownloadInfo>("playwright_wait_for_download", { context:this.ctx, tabId:this.tabId, options });
