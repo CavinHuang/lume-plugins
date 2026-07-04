@@ -22,6 +22,15 @@
       "author": {
         "name": "CavinHuang"
       }
+    },
+    {
+      "name": "obsidian-bridge",
+      "description": "把 Obsidian Vault 变成第二大脑消化系统:信任分层 + Memory Palace + 消化技能,通过本地 HTTP 桥接暴露给 Lume",
+      "version": "0.1.0",
+      "source": "./plugins/obsidian-bridge",
+      "author": {
+        "name": "CavinHuang"
+      }
     }
   ],
   "skills": []

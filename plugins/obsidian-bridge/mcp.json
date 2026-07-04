@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "obsidian-bridge": {
+      "command": "node",
+      "args": ["${PLUGIN_DIR}/dist/mcp.js"],
+      "env": {
+        "OBSIDIAN_BRIDGE_PORT": "43112"
+      }
+    }
+  }
+}
