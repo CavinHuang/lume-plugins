@@ -1,0 +1,5 @@
+# JSON 统一 LF:生成物(如 .lume-plugin/marketplace.json)需跨平台行尾一致,
+# 否则 check:index 的严格字符串对比在 Windows(autocrlf=true)下误报不一致。
+*.json eol=lf
+# 二进制产物,禁止任何行尾转换。
+*.zip binary
