@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Obsidian Bridge icon</title>
+  <desc id="desc">A local bridge between Lume and an Obsidian vault.</desc>
+  <rect width="128" height="128" rx="28" fill="#243044"/>
+  <path d="M40 34h34l20 22v38H40z" fill="#ffffff" opacity="0.94"/>
+  <path d="M74 34v24h20" fill="#d7e3f4"/>
+  <path d="M50 76h32M50 90h24" stroke="#56657a" stroke-width="7" stroke-linecap="round"/>
+  <path d="M28 66c10-18 25-27 45-27M100 66c-10 18-25 27-45 27" fill="none" stroke="#48d6a8" stroke-width="8" stroke-linecap="round"/>
+  <path d="m62 29 11 10-13 12" fill="none" stroke="#48d6a8" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m66 99-11-10 13-12" fill="none" stroke="#48d6a8" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

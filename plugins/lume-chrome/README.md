@@ -19,6 +19,18 @@ Use this plugin when existing Chrome state matters: logged-in sessions, cookies,
 current tabs, browser profile data, or a SaaS/internal tool that cannot be
 recreated in the in-app browser.
 
+## Setup in Lume
+
+1. Install or load the MV3 Chrome extension from this plugin package and keep it
+   enabled in Chrome.
+2. Build the Native Host, set `LUME_EXTENSION_ID`, `LUME_CHROME_HOST_PATH`, and
+   `LUME_APP_SERVER_URL`, then run `npm run install:native-host`.
+3. Keep Chrome and Lume running. The extension popup should show that the Native
+   Host is connected to the local Lume app server.
+4. When Chrome control reaches a sensitive action such as login, clipboard,
+   download, or credential fill, confirm the Lume or Chrome authorization prompt
+   before continuing the chat turn.
+
 ## What it implements
 
 - MV3 Chrome extension with Native Messaging transport and reconnect status

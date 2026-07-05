@@ -6,6 +6,37 @@
   "author": "CavinHuang",
   "displayName": "Obsidian Bridge",
   "category": "Knowledge",
+  "marketplace": {
+    "icon": "./assets/icon.svg",
+    "thumbnail": "./assets/thumbnail.svg",
+    "docs": "./README.md",
+    "setup": [
+      {
+        "id": "install-obsidian-plugin",
+        "title": "安装 Obsidian 端插件",
+        "description": "将 main.js 与 manifest.json 放入 Vault 的 .obsidian/plugins/obsidian-bridge/ 目录,然后在 Obsidian 社区插件中启用。",
+        "kind": "install"
+      },
+      {
+        "id": "enable-local-bridge",
+        "title": "确认本地桥接服务",
+        "description": "保持 Obsidian 打开,确认桥接插件监听 127.0.0.1:43112,只允许本机 Lume 访问。",
+        "kind": "local-service"
+      },
+      {
+        "id": "copy-pairing-code",
+        "title": "复制配对码",
+        "description": "在 Obsidian 插件设置页复制 10 分钟内有效的配对码。",
+        "kind": "pairing-code"
+      },
+      {
+        "id": "pair-from-lume",
+        "title": "在 Lume 完成配对",
+        "description": "首次使用时按 Lume 弹窗输入配对码;绑定后请求会使用本地 token。",
+        "kind": "pairing-code"
+      }
+    ]
+  },
   "skills": ["./skills/"],
   "mcpServers": "./mcp.json",
   "permissions": {

@@ -9,6 +9,14 @@
 - **Memory Palace**:`digest-note` 技能按 `palace/digest_note_room.md` 房间卡编排。
 - **digest-note 技能**:消化笔记 → `memory/inbox/<date>.md`。
 
+## Lume 市场设置流程
+
+1. 将 Obsidian 端插件的 `main.js` 与 `manifest.json` 放入
+   `<Vault>/.obsidian/plugins/obsidian-bridge/`,然后在 Obsidian 社区插件设置中启用。
+2. 保持 Obsidian 打开,确认桥接插件监听 `127.0.0.1:43112`。
+3. 在 Obsidian 插件设置页复制 10 分钟内有效的配对码。
+4. 首次从 Lume 使用插件时,在弹窗中输入配对码完成绑定;之后请求会使用本地 token。
+
 ## 权限说明
 
 | 权限 | 用途 |
