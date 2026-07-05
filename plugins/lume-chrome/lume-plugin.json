@@ -32,7 +32,7 @@
       {
         "id": "confirm-browser-auth",
         "title": "确认浏览器授权",
-        "description": "遇到登录、剪贴板、下载等敏感动作时,在 Lume 或 Chrome 授权弹窗中确认后再继续对话。",
+        "description": "从插件详情页试用会以 $lume-chrome 激活技能;遇到登录、OTP、剪贴板、下载等敏感动作时,在 Lume browserAuth 或 Chrome 授权弹窗中确认后再继续对话。",
         "kind": "browser-auth"
       }
     ]

@@ -31,6 +31,15 @@ recreated in the in-app browser.
    download, or credential fill, confirm the Lume or Chrome authorization prompt
    before continuing the chat turn.
 
+## Activate in chat
+
+From the Lume plugin detail page, use "try in chat"; it seeds the chat with
+`$lume-chrome` so the Agent loads `skills/control-browser/SKILL.md`.
+
+You can also type `$lume-chrome` manually in any Lume chat. Passwords, OTP
+codes, and login secrets must still go through the `browserAuth` prompt exposed
+by Lume's `node_repl` bridge; do not paste credentials directly into chat.
+
 ## What it implements
 
 - MV3 Chrome extension with Native Messaging transport and reconnect status
@@ -72,6 +81,10 @@ uses `ws://127.0.0.1:43127/browser`, matching the node_repl bridge default.
 The plugin is consumed through `skills/control-browser/SKILL.md`. The skill must
 start from `mcp__node_repl__js`; do not assume a pre-existing `transport` or
 global browser agent.
+
+The expected manual activation prefix is `$lume-chrome`. When activated this
+way, the Agent should continue into the requested browser task after startup
+instead of only reporting setup status.
 
 After startup, browser tasks use:
 

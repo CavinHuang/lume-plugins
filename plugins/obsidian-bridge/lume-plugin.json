@@ -32,7 +32,7 @@
       {
         "id": "pair-from-lume",
         "title": "在 Lume 完成配对",
-        "description": "首次使用时按 Lume 弹窗输入配对码;绑定后请求会使用本地 token。",
+        "description": "首次使用时在 Lume 对话中输入配对码;Agent 会调用 pair_with_code,绑定后请求会使用本地 token。",
         "kind": "pairing-code"
       }
     ]
@@ -40,6 +40,7 @@
   "skills": ["./skills/"],
   "mcpServers": "./mcp.json",
   "permissions": {
+    "mcpServers": { "register": true },
     "network": { "outbound": ["127.0.0.1:43112"] }
   },
   "lume": { "hooksOnly": false }

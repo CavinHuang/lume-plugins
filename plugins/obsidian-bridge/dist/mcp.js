@@ -104,6 +104,38 @@ function createObsidianClient(deps) {
   };
 }
 
+// src/mcp/token-store.ts
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+function resolveDefaultTokenStorePath() {
+  return process.env.OBSIDIAN_BRIDGE_TOKEN_STORE ?? join(homedir(), ".lume", "plugin-data", "obsidian-bridge", "token.json");
+}
+function createFileTokenStore(path = resolveDefaultTokenStorePath()) {
+  return {
+    async read() {
+      try {
+        const raw = await readFile(path, "utf-8");
+        const parsed = JSON.parse(raw);
+        return typeof parsed.token === "string" && parsed.token.trim() ? parsed.token : null;
+      } catch (error) {
+        if (error.code === "ENOENT") return null;
+        return null;
+      }
+    },
+    async write(token) {
+      await mkdir(dirname(path), { recursive: true });
+      const tmp = `${path}.tmp-${process.pid}-${Date.now()}`;
+      await writeFile(tmp, `${JSON.stringify({ token }, null, 2)}
+`, { encoding: "utf-8", mode: 384 });
+      await rename(tmp, path);
+    },
+    async clear() {
+      await rm(path, { force: true });
+    }
+  };
+}
+
 // node_modules/zod/v3/external.js
 var external_exports = {};
 __export(external_exports, {
@@ -4149,99 +4181,154 @@ var NEVER = INVALID;
 var zod_default = external_exports;
 
 // src/mcp/tools.ts
-function registerTools(server2, client2) {
+function registerTools(server2, client2, options = {}) {
+  const tokenStore2 = options.tokenStore ?? createFileTokenStore();
+  server2.tool(
+    "bridge_status",
+    "Check local Obsidian bridge reachability and pairing status without exposing the token",
+    {},
+    async () => toolText(async () => {
+      const health = await client2.health();
+      const paired = Boolean(process.env.OBSIDIAN_BRIDGE_TOKEN || await tokenStore2.read());
+      return JSON.stringify({
+        reachable: true,
+        ok: health.ok,
+        protocol: health.protocol,
+        appVersion: health.appVersion,
+        vaultName: health.vaultName,
+        paired,
+        pairingRequired: !paired
+      });
+    })
+  );
+  server2.tool(
+    "pair_with_code",
+    "Pair Lume with Obsidian using the code shown in the Obsidian Bridge settings page",
+    { code: zod_default.string().min(1) },
+    async ({ code }) => toolText(async () => {
+      const paired = await client2.pair(code.trim());
+      await tokenStore2.write(paired.token);
+      return JSON.stringify({ paired: true, vaultName: paired.vaultName });
+    })
+  );
+  server2.tool(
+    "forget_pairing",
+    "Forget the locally stored Obsidian pairing token",
+    {},
+    async () => toolText(async () => {
+      await tokenStore2.clear();
+      return JSON.stringify({ paired: false });
+    })
+  );
   server2.tool(
     "read_note",
     "Read a note's content by vault path",
     { path: zod_default.string() },
-    async ({ path }) => {
+    async ({ path }) => toolText(async () => {
       const r = await client2.readNote(path);
-      return { content: [{ type: "text", text: r.content }] };
-    }
+      return r.content;
+    })
   );
   server2.tool(
     "search_notes",
     "Search vault by keyword (full-text)",
     { query: zod_default.string(), limit: zod_default.number().optional() },
-    async ({ query, limit }) => {
+    async ({ query, limit }) => toolText(async () => {
       const hits = await client2.search(query, { limit });
-      return { content: [{ type: "text", text: JSON.stringify(hits) }] };
-    }
+      return JSON.stringify(hits);
+    })
   );
   server2.tool(
     "upsert_note",
     "Create or overwrite a note. For long-term memory zones (people/projects/wiki/...) set confirmed=true after user approval.",
     { path: zod_default.string(), content: zod_default.string(), confirmed: zod_default.boolean().optional() },
-    async ({ path, content, confirmed }) => {
+    async ({ path, content, confirmed }) => toolText(async () => {
       await client2.upsertNote(path, content, { confirmed });
-      return { content: [{ type: "text", text: `written: ${path}` }] };
-    }
+      return `written: ${path}`;
+    })
   );
   server2.tool(
     "delete_note",
     "Delete a note by path",
     { path: zod_default.string() },
-    async ({ path }) => {
+    async ({ path }) => toolText(async () => {
       await client2.deleteNote(path);
-      return { content: [{ type: "text", text: `deleted: ${path}` }] };
-    }
+      return `deleted: ${path}`;
+    })
   );
   server2.tool(
     "get_metadata",
     "Get tags/frontmatter of a note",
     { path: zod_default.string() },
-    async ({ path }) => {
+    async ({ path }) => toolText(async () => {
       const m = await client2.metadata(path);
-      return { content: [{ type: "text", text: JSON.stringify(m) }] };
-    }
+      return JSON.stringify(m);
+    })
   );
   server2.tool(
     "backlinks",
     "List backlinks of a note",
     { path: zod_default.string() },
-    async ({ path }) => {
+    async ({ path }) => toolText(async () => {
       const b = await client2.backlinks(path);
-      return { content: [{ type: "text", text: JSON.stringify(b) }] };
-    }
+      return JSON.stringify(b);
+    })
   );
   server2.tool(
     "read_palace",
     "Read a Memory Palace room card (trigger/mustRead/conditionalRead/outputLocation/pitfalls)",
     { room: zod_default.string() },
-    async ({ room }) => {
+    async ({ room }) => toolText(async () => {
       const c = await client2.readPalace(room);
-      return { content: [{ type: "text", text: JSON.stringify(c) }] };
-    }
+      return JSON.stringify(c);
+    })
   );
   server2.tool(
     "list_notes",
     "List note paths under a vault prefix (e.g. 'memory/inbox/')",
     { prefix: zod_default.string() },
-    async ({ prefix }) => {
+    async ({ prefix }) => toolText(async () => {
       const paths = await client2.listNotes(prefix);
-      return { content: [{ type: "text", text: JSON.stringify(paths) }] };
-    }
+      return JSON.stringify(paths);
+    })
   );
   server2.tool(
     "vault_diagnostics",
     "Vault health: broken links, orphans (no links), and raw/ files not yet digested",
     {},
-    async () => {
+    async () => toolText(async () => {
       const d = await client2.diagnostics();
-      return { content: [{ type: "text", text: JSON.stringify(d) }] };
-    }
+      return JSON.stringify(d);
+    })
   );
+}
+async function toolText(run) {
+  try {
+    return { content: [{ type: "text", text: await run() }] };
+  } catch (error) {
+    return { content: [{ type: "text", text: formatBridgeToolError(error) }] };
+  }
+}
+function formatBridgeToolError(error) {
+  if (error instanceof BridgeError && error.code === ERROR_CODES.token_invalid) {
+    return "Obsidian bridge is reachable but not paired. Ask the user for the pairing code shown in Obsidian, then call pair_with_code.";
+  }
+  if (error instanceof BridgeError && error.code === ERROR_CODES.bridge_unreachable) {
+    return "Obsidian bridge is unreachable. Ask the user to open Obsidian and enable the Obsidian Bridge plugin.";
+  }
+  return error instanceof Error ? error.message : String(error);
 }
 
 // src/mcp/server.ts
 var PORT = Number(process.env.OBSIDIAN_BRIDGE_PORT ?? 43112);
 var baseUrl = `http://127.0.0.1:${PORT}`;
+var tokenStore = createFileTokenStore();
 var client = createObsidianClient({
   baseUrl,
-  getToken: async () => process.env.OBSIDIAN_BRIDGE_TOKEN ?? null
+  getToken: async () => process.env.OBSIDIAN_BRIDGE_TOKEN ?? await tokenStore.read()
 });
 var server = new McpServer({ name: "obsidian-bridge", version: "0.1.0" });
-registerTools(server, client);
+registerTools(server, client, { tokenStore });
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);

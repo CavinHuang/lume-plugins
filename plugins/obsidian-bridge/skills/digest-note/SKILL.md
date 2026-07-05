@@ -7,6 +7,10 @@ description: 消化一篇 Obsidian 笔记(或选区),提炼关键内容写入 me
 
 把一篇"死笔记"消化成待沉淀的 inbox 条目。
 
+## 连接预检
+
+开始前先调用 `bridge_status`。如果返回 `pairingRequired`,请向用户索要 Obsidian 插件设置页显示的配对码,然后调用 `pair_with_code`；不要要求用户在 Lume 其他地方寻找验证码输入框。
+
 ## 执行步骤(严格按序)
 
 1. **取房间卡**:调用 `read_palace { room: "digest_note_room" }`,获得 mustRead/conditionalRead/outputLocation/pitfalls。
