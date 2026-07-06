@@ -21,7 +21,6 @@ if (target === "obsidian") {
     format: "esm",
     platform: "node",
     target: "es2022",
-    external: ["@modelcontextprotocol/sdk"],
     logLevel: "info",
   });
 }
