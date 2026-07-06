@@ -1,7 +1,7 @@
 {
   "schema": "lume-plugin/v1",
   "name": "obsidian-bridge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "把 Obsidian Vault 变成第二大脑消化系统:信任分层 + Memory Palace + 消化技能,通过本地 HTTP 桥接暴露给 Lume",
   "author": "CavinHuang",
   "displayName": "Obsidian Bridge",

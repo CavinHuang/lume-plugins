@@ -4327,7 +4327,7 @@ var client = createObsidianClient({
   baseUrl,
   getToken: async () => process.env.OBSIDIAN_BRIDGE_TOKEN ?? await tokenStore.read()
 });
-var server = new McpServer({ name: "obsidian-bridge", version: "0.1.0" });
+var server = new McpServer({ name: "obsidian-bridge", version: "0.1.1" });
 registerTools(server, client, { tokenStore });
 async function main() {
   const transport = new StdioServerTransport();

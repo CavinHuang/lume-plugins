@@ -13,7 +13,7 @@ const client = createObsidianClient({
   getToken: async () => process.env.OBSIDIAN_BRIDGE_TOKEN ?? await tokenStore.read(),
 });
 
-const server = new McpServer({ name: "obsidian-bridge", version: "0.1.0" });
+const server = new McpServer({ name: "obsidian-bridge", version: "0.1.1" });
 registerTools(server, client, { tokenStore });
 
 async function main() {

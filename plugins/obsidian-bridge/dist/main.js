@@ -128,7 +128,7 @@ function createRouter(deps) {
     if (req.method === "GET" && req.path === "/health") {
       return {
         status: 200,
-        body: { ok: true, protocol: PROTOCOL_VERSION, appVersion: "0.1.0", vaultName: deps.vaultName }
+        body: { ok: true, protocol: PROTOCOL_VERSION, appVersion: "0.1.1", vaultName: deps.vaultName }
       };
     }
     if (req.method === "POST" && req.path === "/pair") {

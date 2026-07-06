@@ -1,7 +1,7 @@
 {
   "id": "obsidian-bridge",
   "name": "Obsidian Bridge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "minAppVersion": "1.4.0",
   "description": "第二大脑消化系统桥接——为 Lume 暴露本地 HTTP API",
   "author": "CavinHuang",
