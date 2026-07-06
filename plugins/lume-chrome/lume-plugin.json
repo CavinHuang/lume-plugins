@@ -6,6 +6,37 @@
   "author": "CavinHuang",
   "displayName": "Lume Browse",
   "category": "Browser",
+  "marketplace": {
+    "icon": "./extension/icons/icon128.png",
+    "thumbnail": "./assets/thumbnail.svg",
+    "docs": "./README.md",
+    "setup": [
+      {
+        "id": "install-extension",
+        "title": "安装 Chrome 扩展",
+        "description": "在 Chrome 扩展页加载或安装插件包内的 MV3 扩展,确保扩展处于启用状态。",
+        "kind": "install"
+      },
+      {
+        "id": "install-native-host",
+        "title": "安装 Native Host",
+        "description": "构建 Native Host 后设置 LUME_EXTENSION_ID、LUME_CHROME_HOST_PATH 和 LUME_APP_SERVER_URL,再运行 npm run install:native-host。",
+        "kind": "local-service"
+      },
+      {
+        "id": "keep-chrome-ready",
+        "title": "保持 Chrome 与 Lume 运行",
+        "description": "打开 Chrome,确认扩展弹窗显示 Native Host 已连接,同时保持 Lume 的 node_repl 桥接可用。",
+        "kind": "local-service"
+      },
+      {
+        "id": "confirm-browser-auth",
+        "title": "确认浏览器授权",
+        "description": "从插件详情页试用会以 $lume-chrome 激活技能;遇到登录、OTP、剪贴板、下载等敏感动作时,在 Lume browserAuth 或 Chrome 授权弹窗中确认后再继续对话。",
+        "kind": "browser-auth"
+      }
+    ]
+  },
   "skills": ["./skills/"],
   "permissions": {
     "filesystem": {

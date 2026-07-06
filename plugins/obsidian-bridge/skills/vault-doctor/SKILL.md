@@ -7,6 +7,10 @@ description: 给整个 Vault 做体检:断链、孤儿笔记、raw/ 未消化、
 
 Vault 体检,定位"死数据"与结构问题。
 
+## 连接预检
+
+开始前先调用 `bridge_status`。如果返回 `pairingRequired`,请向用户索要 Obsidian 插件设置页显示的配对码,然后调用 `pair_with_code`；不要要求用户在 Lume 其他地方寻找验证码输入框。
+
 ## 执行步骤(严格按序)
 
 1. **取房间卡**:调用 `read_palace { room: "vault_doctor_room" }`。

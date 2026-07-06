@@ -19,6 +19,27 @@ Use this plugin when existing Chrome state matters: logged-in sessions, cookies,
 current tabs, browser profile data, or a SaaS/internal tool that cannot be
 recreated in the in-app browser.
 
+## Setup in Lume
+
+1. Install or load the MV3 Chrome extension from this plugin package and keep it
+   enabled in Chrome.
+2. Build the Native Host, set `LUME_EXTENSION_ID`, `LUME_CHROME_HOST_PATH`, and
+   `LUME_APP_SERVER_URL`, then run `npm run install:native-host`.
+3. Keep Chrome and Lume running. The extension popup should show that the Native
+   Host is connected to the local Lume app server.
+4. When Chrome control reaches a sensitive action such as login, clipboard,
+   download, or credential fill, confirm the Lume or Chrome authorization prompt
+   before continuing the chat turn.
+
+## Activate in chat
+
+From the Lume plugin detail page, use "try in chat"; it seeds the chat with
+`$lume-chrome` so the Agent loads `skills/control-browser/SKILL.md`.
+
+You can also type `$lume-chrome` manually in any Lume chat. Passwords, OTP
+codes, and login secrets must still go through the `browserAuth` prompt exposed
+by Lume's `node_repl` bridge; do not paste credentials directly into chat.
+
 ## What it implements
 
 - MV3 Chrome extension with Native Messaging transport and reconnect status
@@ -60,6 +81,10 @@ uses `ws://127.0.0.1:43127/browser`, matching the node_repl bridge default.
 The plugin is consumed through `skills/control-browser/SKILL.md`. The skill must
 start from `mcp__node_repl__js`; do not assume a pre-existing `transport` or
 global browser agent.
+
+The expected manual activation prefix is `$lume-chrome`. When activated this
+way, the Agent should continue into the requested browser task after startup
+instead of only reporting setup status.
 
 After startup, browser tasks use:
 

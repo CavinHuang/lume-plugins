@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">Obsidian Bridge marketplace thumbnail</title>
+  <desc id="desc">Obsidian vault, local HTTP bridge, pairing code, and Lume memory workflows.</desc>
+  <rect width="1200" height="420" rx="36" fill="#f7f4ff"/>
+  <rect x="72" y="68" width="312" height="262" rx="28" fill="#ffffff" stroke="#d9d1ef"/>
+  <path d="M140 126h110l62 68v92H140z" fill="#243044"/>
+  <path d="M250 126v72h62" fill="#58647c"/>
+  <rect x="162" y="230" width="110" height="16" rx="8" fill="#48d6a8"/>
+  <rect x="162" y="260" width="84" height="14" rx="7" fill="#cfd7e5"/>
+  <text x="72" y="374" fill="#243044" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="22" font-weight="700">Obsidian Vault</text>
+  <path d="M430 210h122" stroke="#7d6ca8" stroke-width="8" stroke-linecap="round"/>
+  <path d="m536 186 28 24-28 24" fill="none" stroke="#7d6ca8" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="604" y="98" width="232" height="224" rx="26" fill="#ffffff" stroke="#d9d1ef"/>
+  <rect x="638" y="138" width="164" height="48" rx="18" fill="#243044"/>
+  <text x="670" y="170" fill="#ffffff" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="22" font-weight="700">43112</text>
+  <rect x="638" y="216" width="164" height="52" rx="18" fill="#f0fbf7" stroke="#bdebdc"/>
+  <text x="664" y="249" fill="#19735a" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700">Pairing code</text>
+  <text x="604" y="374" fill="#243044" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="22" font-weight="700">Local bridge</text>
+  <path d="M880 210h112" stroke="#7d6ca8" stroke-width="8" stroke-linecap="round"/>
+  <path d="m976 186 28 24-28 24" fill="none" stroke="#7d6ca8" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="1018" y="128" width="88" height="88" rx="24" fill="#0097a7"/>
+  <path d="M1062 150v44M1040 172h44" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
+  <rect x="992" y="244" width="140" height="48" rx="16" fill="#ffffff" stroke="#d9d1ef"/>
+  <text x="1023" y="275" fill="#243044" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700">Lume</text>
+  <text x="72" y="42" fill="#243044" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Obsidian Bridge</text>
+  <text x="72" y="398" fill="#5b5870" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18">Digest notes into trusted long-term memory through a local-only bridge.</text>
+</svg>

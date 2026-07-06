@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">Lume Browse marketplace thumbnail</title>
+  <desc id="desc">Chrome extension, native host bridge, and browser authorization flow.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#eef7ff"/>
+      <stop offset="0.52" stop-color="#f6fbf8"/>
+      <stop offset="1" stop-color="#fff4e5"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="420" rx="36" fill="url(#bg)"/>
+  <rect x="64" y="58" width="1072" height="304" rx="28" fill="#ffffff" opacity="0.86"/>
+  <rect x="104" y="104" width="300" height="212" rx="22" fill="#f7fafc" stroke="#d8e1ea"/>
+  <circle cx="176" cy="180" r="44" fill="#1a73e8"/>
+  <circle cx="176" cy="180" r="20" fill="#ffffff"/>
+  <path d="M176 136a44 44 0 0 1 38 22h-76a44 44 0 0 1 38-22Z" fill="#ea4335"/>
+  <path d="M214 158a44 44 0 0 1-38 66l38-66Z" fill="#34a853"/>
+  <path d="M138 158h76l-38 66a44 44 0 0 1-38-66Z" fill="#fbbc04"/>
+  <text x="104" y="356" fill="#17324d" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="22" font-weight="600">Chrome extension</text>
+  <path d="M448 210h108" stroke="#6b7f93" stroke-width="8" stroke-linecap="round"/>
+  <path d="m540 186 28 24-28 24" fill="none" stroke="#6b7f93" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="604" y="104" width="226" height="212" rx="22" fill="#102033"/>
+  <rect x="640" y="144" width="154" height="18" rx="9" fill="#48d6a8"/>
+  <rect x="640" y="184" width="112" height="16" rx="8" fill="#90a4b8"/>
+  <rect x="640" y="222" width="132" height="16" rx="8" fill="#90a4b8"/>
+  <text x="604" y="356" fill="#17324d" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="22" font-weight="600">Native Host bridge</text>
+  <path d="M876 210h108" stroke="#6b7f93" stroke-width="8" stroke-linecap="round"/>
+  <path d="m968 186 28 24-28 24" fill="none" stroke="#6b7f93" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="1016" y="116" width="72" height="72" rx="18" fill="#0097a7"/>
+  <path d="M1052 136v32M1036 152h32" stroke="#ffffff" stroke-width="8" stroke-linecap="round"/>
+  <rect x="980" y="212" width="144" height="62" rx="20" fill="#ffffff" stroke="#c7d5e2"/>
+  <circle cx="1022" cy="243" r="12" fill="#48d6a8"/>
+  <text x="1044" y="250" fill="#17324d" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="700">Authorize</text>
+  <text x="64" y="42" fill="#17324d" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700">Lume Browse</text>
+  <text x="64" y="394" fill="#526579" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18">Control the user's existing Chrome profile from Lume.</text>
+</svg>

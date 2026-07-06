@@ -16,6 +16,10 @@ If this skill was activated with a concrete user request, complete that request
 in the same turn after Startup. Do not stop after reporting the bridge URL, and
 do not ask the user to repeat the task.
 
+The Lume plugin detail page activates this skill by seeding chat with
+`$lume-chrome`. Treat that prefix as an explicit request to use this Chrome
+plugin, then inspect status or perform the user's requested browser task.
+
 ## Startup
 
 Use the `mcp__node_repl__js` tool. Do not assume a `transport` variable, `agent`
