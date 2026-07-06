@@ -515,6 +515,14 @@ async function ensurePalaceRooms(app) {
   }
 }
 
+// src/obsidian-app/pairing-ui.ts
+function formatPairingCode(code) {
+  if (!code) {
+    return "\u2014";
+  }
+  return code.match(/.{1,3}/g)?.join(" ") ?? code;
+}
+
 // src/obsidian-app/main.ts
 var ObsidianBridgePlugin = class extends import_obsidian.Plugin {
   server;
@@ -540,6 +548,13 @@ var ObsidianBridgePlugin = class extends import_obsidian.Plugin {
   onunload() {
     this.server?.close();
   }
+  regeneratePairingCode() {
+    if (!this.pairing) {
+      return "";
+    }
+    this.pairingCode = this.pairing.generateCode();
+    return this.pairingCode;
+  }
 };
 var BridgeSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -549,10 +564,108 @@ var BridgeSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h3", { text: "Obsidian Bridge" });
-    containerEl.createEl("p", {
-      text: "\u914D\u5BF9\u7801(10 \u5206\u949F\u5185\u6709\u6548;\u91CD\u65B0\u751F\u6210\u8BF7\u7981\u7528\u518D\u542F\u7528\u672C\u63D2\u4EF6):"
+    containerEl.createEl("h2", { text: "Obsidian Bridge" });
+    const description = containerEl.createEl("p", {
+      text: "\u8BA9 Lume \u5B89\u5168\u8FDE\u63A5\u5F53\u524D Vault\u3002"
     });
-    containerEl.createEl("pre", { text: this.plugin.pairingCode || "\u2014" });
+    description.style.color = "var(--text-muted)";
+    this.renderPairingPanel(containerEl);
+  }
+  renderPairingPanel(containerEl) {
+    const panel = containerEl.createDiv();
+    panel.style.background = "var(--background-secondary)";
+    panel.style.border = "1px solid var(--background-modifier-border)";
+    panel.style.borderRadius = "8px";
+    panel.style.padding = "18px";
+    panel.style.maxWidth = "560px";
+    const statusLabel = panel.createEl("div", { text: "\u72B6\u6001" });
+    statusLabel.style.fontWeight = "600";
+    statusLabel.style.marginBottom = "8px";
+    const statusRow = panel.createDiv();
+    statusRow.style.display = "flex";
+    statusRow.style.alignItems = "center";
+    statusRow.style.gap = "8px";
+    statusRow.style.marginBottom = "18px";
+    const statusDot = statusRow.createSpan({ text: "\u25CF" });
+    statusDot.style.color = "var(--text-accent)";
+    statusRow.createSpan({ text: `\u672C\u5730\u670D\u52A1\u8FD0\u884C\u4E2D  127.0.0.1:${DEFAULT_PORT}` });
+    this.renderCodeRow(panel, this.plugin.pairingCode);
+    const hint = panel.createEl("p", {
+      text: "10 \u5206\u949F\u5185\u6709\u6548\u3002\u590D\u5236\u540E\u56DE\u5230 Lume \u5BF9\u8BDD\u53D1\u9001\u3002"
+    });
+    hint.style.color = "var(--text-muted)";
+    hint.style.marginTop = "10px";
+    hint.style.marginBottom = "16px";
+    const regenerateButton = panel.createEl("button", { text: "\u91CD\u65B0\u751F\u6210\u914D\u5BF9\u7801" });
+    regenerateButton.addEventListener("click", () => {
+      this.plugin.regeneratePairingCode();
+      new import_obsidian.Notice("\u5DF2\u751F\u6210\u65B0\u7684\u914D\u5BF9\u7801");
+      this.display();
+    });
+  }
+  renderCodeRow(parent, code) {
+    const codeLabel = parent.createEl("div", { text: "\u914D\u5BF9\u7801" });
+    codeLabel.style.fontWeight = "600";
+    codeLabel.style.marginBottom = "8px";
+    const codeRow = parent.createDiv();
+    codeRow.style.display = "flex";
+    codeRow.style.alignItems = "stretch";
+    codeRow.style.flexWrap = "wrap";
+    codeRow.style.gap = "10px";
+    const codeBox = codeRow.createDiv();
+    codeBox.style.background = "var(--background-primary)";
+    codeBox.style.border = "1px solid var(--background-modifier-border)";
+    codeBox.style.borderRadius = "8px";
+    codeBox.style.fontFamily = "var(--font-monospace)";
+    codeBox.style.fontSize = "32px";
+    codeBox.style.fontWeight = "700";
+    codeBox.style.letterSpacing = "0";
+    codeBox.style.lineHeight = "1";
+    codeBox.style.minWidth = "220px";
+    codeBox.style.padding = "16px 22px";
+    codeBox.style.textAlign = "center";
+    codeBox.style.userSelect = "text";
+    codeBox.setText(formatPairingCode(code));
+    const copyButton = codeRow.createEl("button", { text: "\u590D\u5236", cls: "mod-cta" });
+    copyButton.disabled = !code;
+    copyButton.addEventListener("click", () => {
+      void this.copyPairingCode(code, copyButton);
+    });
+  }
+  async copyPairingCode(code, button) {
+    try {
+      await copyTextToClipboard(code);
+      new import_obsidian.Notice("\u914D\u5BF9\u7801\u5DF2\u590D\u5236");
+      const previousText = button.textContent ?? "\u590D\u5236";
+      button.textContent = "\u5DF2\u590D\u5236";
+      window.setTimeout(() => {
+        button.textContent = previousText;
+      }, 1200);
+    } catch {
+      new import_obsidian.Notice("\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u624B\u52A8\u590D\u5236\u914D\u5BF9\u7801");
+    }
   }
 };
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+    }
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.left = "-9999px";
+  textarea.style.position = "fixed";
+  document.body.appendChild(textarea);
+  textarea.select();
+  try {
+    if (!document.execCommand("copy")) {
+      throw new Error("copy_failed");
+    }
+  } finally {
+    textarea.remove();
+  }
+}
