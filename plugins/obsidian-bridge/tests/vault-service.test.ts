@@ -31,7 +31,8 @@ function mockApp(
   );
   return {
     vault: {
-      getAbstractFileByPath: (p: string) => (store.has(p) ? { path: p } : null),
+      getAbstractFileByPath: (p: string) =>
+        store.has(p) ? { path: p, stat: { mtime: store.get(p)!.mtime!, ctime: store.get(p)!.ctime } } : null,
       read: async (f: { path: string }) => store.get(f.path)!.content,
       create: async (p: string, c: string) => {
         store.set(p, { content: c, mtime: 2000, ctime: 2000, frontmatter: {}, tags: [] });
@@ -120,4 +121,39 @@ test("diagnostics 汇总断链/孤儿/raw 未消化", async () => {
   assert.deepEqual(d.brokenLinks, [{ from: "note.md", link: "bad" }]);
   assert.ok(d.orphans.includes("lonely.md"));
   assert.ok(d.rawUndigested.includes("raw/x.pdf.md"));
+});
+
+test("metadata 返回真实 mtime/ctime(来自 file.stat)", async () => {
+  const app = mockApp({ "a.md": { content: "x", mtime: 7777 } });
+  const s = createVaultService(app);
+  const m = await s.metadata("a.md");
+  assert.equal(m.mtime, 7777);
+  assert.equal(m.ctime, 500); // mockApp 默认 ctime
+});
+
+test("backlinks 同时返回断链(unresolvedLinks)反链", async () => {
+  const app = mockApp(
+    { "a.md": { content: "x" }, "b.md": { content: "[[a]]" }, "c.md": { content: "[[ghost]]" } },
+    {
+      resolvedLinks: { "b.md": { "a.md": 2 } },
+      unresolvedLinks: { "c.md": ["ghost"] },
+    },
+  );
+  const s = createVaultService(app);
+  // a.md 存在 → resolved 反链
+  const bl = await s.backlinks("a.md");
+  assert.equal(bl.length, 1);
+  assert.equal(bl[0].fromPath, "b.md");
+  // ghost 不存在 → 断链反链
+  const ghost = await s.backlinks("ghost");
+  assert.equal(ghost.length, 1);
+  assert.equal(ghost[0].fromPath, "c.md");
+});
+
+test("metadata 对不存在文件返回空且不抛", async () => {
+  const app = mockApp({});
+  const s = createVaultService(app);
+  const m = await s.metadata("missing.md");
+  assert.deepEqual(m.tags, []);
+  assert.deepEqual(m.frontmatter, {});
 });

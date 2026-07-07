@@ -315,7 +315,12 @@ function createVaultService(app) {
       const f = app.vault.getAbstractFileByPath(path);
       const cache = f ? app.metadataCache.getFileCache(f) : null;
       const tags = cache?.tags ? Object.keys(cache.tags).map((t) => t.replace(/^#/, "")) : [];
-      return { tags, frontmatter: cache?.frontmatter ?? {}, mtime: 0, ctime: 0 };
+      return {
+        tags,
+        frontmatter: cache?.frontmatter ?? {},
+        mtime: f?.stat?.mtime ?? 0,
+        ctime: f?.stat?.ctime ?? 0
+      };
     },
     async backlinks(path) {
       const target = path.replace(/\.md$/, "");
@@ -324,6 +329,13 @@ function createVaultService(app) {
         for (const [tgt, count] of Object.entries(links)) {
           if (tgt === path || tgt.replace(/\.md$/, "") === target) {
             out.push({ fromPath: src, occurrences: count });
+          }
+        }
+      }
+      for (const [src, links] of Object.entries(app.metadataCache.unresolvedLinks)) {
+        for (const link of links) {
+          if (link === path || link === target || link.replace(/\.md$/, "") === target) {
+            out.push({ fromPath: src, occurrences: 1 });
           }
         }
       }

@@ -3,12 +3,12 @@ import type { VaultService } from "./http-router.ts";
 // 最小 Obsidian 类型(避免强耦合 obsidian 包;真实 app 满足结构即可)
 interface ObsidianApp {
   vault: {
-    getAbstractFileByPath(p: string): { path: string } | null;
+    getAbstractFileByPath(p: string): { path: string; stat?: { mtime: number; ctime: number } } | null;
     read(f: { path: string }): Promise<string>;
     create(p: string, c: string): Promise<{ path: string }>;
     modify(f: { path: string }, c: string): Promise<void>;
     delete(f: { path: string }): Promise<void>;
-    getMarkdownFiles(): { path: string }[];
+    getMarkdownFiles(): { path: string; stat?: { mtime: number; ctime: number } }[];
   };
   metadataCache: {
     getFileCache(f: { path: string }): {
@@ -77,15 +77,29 @@ export function createVaultService(app: ObsidianApp): VaultService {
       const f = app.vault.getAbstractFileByPath(path);
       const cache = f ? app.metadataCache.getFileCache(f) : null;
       const tags = cache?.tags ? Object.keys(cache.tags).map((t) => t.replace(/^#/, "")) : [];
-      return { tags, frontmatter: cache?.frontmatter ?? {}, mtime: 0, ctime: 0 };
+      return {
+        tags,
+        frontmatter: cache?.frontmatter ?? {},
+        mtime: f?.stat?.mtime ?? 0,
+        ctime: f?.stat?.ctime ?? 0,
+      };
     },
     async backlinks(path) {
       const target = path.replace(/\.md$/, "");
       const out: { fromPath: string; occurrences: number }[] = [];
+      // 已解析反链
       for (const [src, links] of Object.entries(app.metadataCache.resolvedLinks)) {
         for (const [tgt, count] of Object.entries(links)) {
           if (tgt === path || tgt.replace(/\.md$/, "") === target) {
             out.push({ fromPath: src, occurrences: count });
+          }
+        }
+      }
+      // 断链反链(有人 [[path]] 但 path 不存在)
+      for (const [src, links] of Object.entries(app.metadataCache.unresolvedLinks)) {
+        for (const link of links) {
+          if (link === path || link === target || link.replace(/\.md$/, "") === target) {
+            out.push({ fromPath: src, occurrences: 1 });
           }
         }
       }
