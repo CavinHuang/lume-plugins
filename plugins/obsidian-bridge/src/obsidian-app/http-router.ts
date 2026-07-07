@@ -7,6 +7,7 @@ import {
 import { classifyTrust, CONFIRMED_HEADER, isWrite } from "./trust-policy.ts";
 import { parseRoomCard } from "./palace.ts";
 import type { PairingStore } from "./pairing-store.ts";
+import type { Adjacency } from "./graph-engine.ts";
 
 export interface VaultService {
   read(path: string): Promise<string>;
@@ -34,6 +35,14 @@ export interface VaultService {
     orphans: string[];
     rawUndigested: string[];
   }>;
+  // 图谱适配层(Task 6):基于 metadataCache.resolvedLinks 构建邻接表 + 邻居/最短路径查询
+  buildAdjacencies(): { fwd: Adjacency; back: Adjacency; both: Adjacency };
+  graphNeighbors(
+    path: string,
+    depth: number,
+    direction: "fwd" | "back" | "both",
+  ): { path: string; depth: number; via: string }[];
+  graphPath(from: string, to: string): string[];
 }
 
 export interface RouterRequest {

@@ -1,4 +1,5 @@
 import type { VaultService } from "./http-router.ts";
+import { neighbors, shortestPath, type Adjacency } from "./graph-engine.ts";
 
 // 最小 Obsidian 类型(避免强耦合 obsidian 包;真实 app 满足结构即可)
 interface ObsidianApp {
@@ -21,6 +22,33 @@ interface ObsidianApp {
 }
 
 export function createVaultService(app: ObsidianApp): VaultService {
+  // 图谱适配层:基于 metadataCache.resolvedLinks 构建 fwd/back/both 三张邻接表。
+  // 孤立节点也作为 key 保留(空 Set),供 Task 7 structure/orphans 使用。
+  function buildAdjacencies(): { fwd: Adjacency; back: Adjacency; both: Adjacency } {
+    const fwd: Adjacency = new Map();
+    const back: Adjacency = new Map();
+    const both: Adjacency = new Map();
+    const ensure = (p: string) => {
+      if (!fwd.has(p)) {
+        fwd.set(p, new Set());
+        back.set(p, new Set());
+        both.set(p, new Set());
+      }
+    };
+    for (const f of app.vault.getMarkdownFiles()) ensure(f.path);
+    for (const [src, links] of Object.entries(app.metadataCache.resolvedLinks)) {
+      ensure(src);
+      for (const tgt of Object.keys(links)) {
+        ensure(tgt);
+        fwd.get(src)!.add(tgt);
+        back.get(tgt)!.add(src);
+        both.get(src)!.add(tgt);
+        both.get(tgt)!.add(src);
+      }
+    }
+    return { fwd, back, both };
+  }
+
   return {
     async read(path) {
       const f = app.vault.getAbstractFileByPath(path);
@@ -139,6 +167,15 @@ export function createVaultService(app: ObsidianApp): VaultService {
       const orphans = allFiles.filter((p) => !connected.has(p));
       const rawUndigested = allFiles.filter((p) => p.startsWith("raw/"));
       return { brokenLinks, orphans, rawUndigested };
+    },
+    buildAdjacencies,
+    graphNeighbors(path, depth, direction) {
+      const adj = buildAdjacencies();
+      const map = direction === "fwd" ? adj.fwd : direction === "back" ? adj.back : adj.both;
+      return neighbors(map, path, depth);
+    },
+    graphPath(from, to) {
+      return shortestPath(buildAdjacencies().both, from, to);
     },
   };
 }

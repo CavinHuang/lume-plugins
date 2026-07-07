@@ -265,8 +265,80 @@ function startServer(opts) {
   return { close: () => server.close(), port: opts.port };
 }
 
+// src/obsidian-app/graph-engine.ts
+function neighbors(adj, start, depth) {
+  const out = [];
+  if (!adj.has(start) || depth <= 0) return out;
+  const seen = /* @__PURE__ */ new Set([start]);
+  let frontier = [{ path: start, depth: 0, via: start }];
+  for (let d = 1; d <= depth; d++) {
+    const next = [];
+    for (const node of frontier) {
+      for (const n of adj.get(node.path) ?? /* @__PURE__ */ new Set()) {
+        if (seen.has(n)) continue;
+        seen.add(n);
+        next.push({ path: n, depth: d, via: node.path });
+      }
+    }
+    out.push(...next);
+    frontier = next;
+    if (next.length === 0) break;
+  }
+  return out;
+}
+function shortestPath(adj, from, to) {
+  if (!adj.has(from) || !adj.has(to)) return [];
+  if (from === to) return [from];
+  const prev = /* @__PURE__ */ new Map();
+  const seen = /* @__PURE__ */ new Set([from]);
+  const queue = [from];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const n of adj.get(cur) ?? /* @__PURE__ */ new Set()) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      prev.set(n, cur);
+      if (n === to) {
+        const path = [to];
+        let c = to;
+        while (c !== from) {
+          c = prev.get(c);
+          path.unshift(c);
+        }
+        return path;
+      }
+      queue.push(n);
+    }
+  }
+  return [];
+}
+
 // src/obsidian-app/vault-service.ts
 function createVaultService(app) {
+  function buildAdjacencies() {
+    const fwd = /* @__PURE__ */ new Map();
+    const back = /* @__PURE__ */ new Map();
+    const both = /* @__PURE__ */ new Map();
+    const ensure = (p) => {
+      if (!fwd.has(p)) {
+        fwd.set(p, /* @__PURE__ */ new Set());
+        back.set(p, /* @__PURE__ */ new Set());
+        both.set(p, /* @__PURE__ */ new Set());
+      }
+    };
+    for (const f of app.vault.getMarkdownFiles()) ensure(f.path);
+    for (const [src, links] of Object.entries(app.metadataCache.resolvedLinks)) {
+      ensure(src);
+      for (const tgt of Object.keys(links)) {
+        ensure(tgt);
+        fwd.get(src).add(tgt);
+        back.get(tgt).add(src);
+        both.get(src).add(tgt);
+        both.get(tgt).add(src);
+      }
+    }
+    return { fwd, back, both };
+  }
   return {
     async read(path) {
       const f = app.vault.getAbstractFileByPath(path);
@@ -371,6 +443,15 @@ function createVaultService(app) {
       const orphans = allFiles.filter((p) => !connected.has(p));
       const rawUndigested = allFiles.filter((p) => p.startsWith("raw/"));
       return { brokenLinks, orphans, rawUndigested };
+    },
+    buildAdjacencies,
+    graphNeighbors(path, depth, direction) {
+      const adj = buildAdjacencies();
+      const map = direction === "fwd" ? adj.fwd : direction === "back" ? adj.back : adj.both;
+      return neighbors(map, path, depth);
+    },
+    graphPath(from, to) {
+      return shortestPath(buildAdjacencies().both, from, to);
     }
   };
 }

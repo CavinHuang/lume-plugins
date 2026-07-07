@@ -187,3 +187,35 @@ test("search type=tag 按标签过滤", async () => {
   assert.equal(hits.length, 1);
   assert.equal(hits[0].path, "a.md");
 });
+
+test("buildAdjacencies 双向化 resolvedLinks 并保留孤立节点", () => {
+  const app = mockApp(
+    { "a.md": { content: "x" }, "b.md": { content: "[[a]]" }, "lonely.md": { content: "l" } },
+    { resolvedLinks: { "b.md": { "a.md": 1 } } },
+  );
+  const s = createVaultService(app);
+  const adj = s.buildAdjacencies();
+  assert.ok(adj.both.has("lonely.md")); // 孤立节点也入表
+  assert.equal(adj.both.get("a.md")!.size, 1); // a-b 双向后 a 连 b
+  assert.ok(adj.fwd.get("b.md")!.has("a.md")); // 出边
+  assert.ok(adj.back.get("a.md")!.has("b.md")); // 入边(反链)
+});
+
+test("graphNeighbors both 方向 N 跳", async () => {
+  const app = mockApp(
+    { "a.md": {}, "b.md": {}, "c.md": {} },
+    { resolvedLinks: { "a.md": { "b.md": 1 }, "b.md": { "c.md": 1 } } },
+  );
+  const s = createVaultService(app);
+  const ns = s.graphNeighbors("a.md", 2, "both").map((n) => n.path).sort();
+  assert.deepEqual(ns, ["b.md", "c.md"]);
+});
+
+test("graphPath 返回最短路径", async () => {
+  const app = mockApp(
+    { "a.md": {}, "b.md": {}, "c.md": {} },
+    { resolvedLinks: { "a.md": { "b.md": 1 }, "b.md": { "c.md": 1 } } },
+  );
+  const s = createVaultService(app);
+  assert.deepEqual(s.graphPath("a.md", "c.md"), ["a.md", "b.md", "c.md"]);
+});
