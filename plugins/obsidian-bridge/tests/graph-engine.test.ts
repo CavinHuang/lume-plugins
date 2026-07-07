@@ -27,6 +27,43 @@ test("neighbors depth=2 不重复、含 2 跳", () => {
   assert.deepEqual(ns, ["b", "c", "e"]); // a→b(1) →a,c,e(2,但 a 已见)
 });
 
+test("neighbors 返回的 depth/via 反映 BFS 层级与上一跳", () => {
+  // 图: a-b-c-d 链 + b-e 分支
+  const ns = neighbors(chainGraph(), "a", 2);
+  const byPath = new Map(ns.map((n) => [n.path, n]));
+  // 1 跳:b 经由 a
+  assert.equal(byPath.get("b")!.depth, 1);
+  assert.equal(byPath.get("b")!.via, "a");
+  // 2 跳:c、e 均经由 b
+  assert.equal(byPath.get("c")!.depth, 2);
+  assert.equal(byPath.get("c")!.via, "b");
+  assert.equal(byPath.get("e")!.depth, 2);
+  assert.equal(byPath.get("e")!.via, "b");
+  // 起点本身不应出现在结果里
+  assert.ok(!byPath.has("a"));
+});
+
+test("neighbors 在含环图上必终止且不重复(seen-set 环安全)", () => {
+  // 三角环 r-u-v-r:每个节点都能绕环回到自己,若无 seen-set 会无限循环
+  const g: Adjacency = new Map();
+  const add = (x: string, y: string) => {
+    if (!g.has(x)) g.set(x, new Set());
+    if (!g.has(y)) g.set(y, new Set());
+    g.get(x)!.add(y);
+    g.get(y)!.add(x);
+  };
+  add("r", "u"); add("u", "v"); add("v", "r");
+  // depth=3 覆盖全图:从 r 出发应在访问完 u、v 后终止,不绕环重复
+  const ns = neighbors(g, "r", 3);
+  const paths = ns.map((n) => n.path).sort();
+  assert.deepEqual(paths, ["u", "v"]); // 不含起点 r,不重复
+  // 环上两邻居都在第 1 跳被收录(经由 r),无更深层级(都被 seen 阻断)
+  for (const n of ns) {
+    assert.equal(n.depth, 1);
+    assert.equal(n.via, "r");
+  }
+});
+
 test("neighbors 起点不存在返回空", () => {
   assert.equal(neighbors(chainGraph(), "missing", 2).length, 0);
 });

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createVaultService } from "../src/obsidian-app/vault-service.ts";
+import { mergeFrontmatterLink } from "../src/mcp/tools.ts";
 
 function mockApp(
   files: Record<
@@ -231,6 +232,8 @@ test("buildAdjacencies 合并 frontmatter.links 类型化边", () => {
   const adj = s.buildAdjacencies();
   assert.ok(adj.fwd.get("p.md")!.has("people/z.md")); // frontmatter.links 进入出边
   assert.ok(adj.both.get("people/z.md")!.has("p.md")); // 双向
+  // 方向语义:类型化边只进 fwd/both,不进 back(wiki-link 入边专管 back)
+  assert.ok(!adj.back.get("people/z.md")!.has("p.md"));
 });
 
 test("graphSimilar 按共邻居返回相似笔记", () => {
@@ -241,4 +244,59 @@ test("graphSimilar 按共邻居返回相似笔记", () => {
   const s = createVaultService(app);
   const sim = s.graphSimilar("x.md", 10);
   assert.ok(sim.some((n) => n.path === "y.md"));
+});
+
+// 最小 frontmatter 解析:仅提取 buildAdjacencies 读取契约所要求的 links[].to(+ 可选 type)。
+// 充当 Obsidian metadataCache「YAML→对象」步骤的 stand-in,把 mergeFrontmatterLink 写出的
+// 文本 frontmatter 还原为 buildAdjacencies 读取的对象形。若两端 schema 漂移,此处解析结果
+// 将与读侧预期不符,下列端到端断言随即失败。
+function parseLinksFromFrontmatter(body: string): Array<{ to: string; type?: string }> {
+  const m = body.match(/^---\n([\s\S]*?)\n---/);
+  if (!m) return [];
+  const fm = m[1]!;
+  const linksMatch = fm.match(/^links:\n((?:[ \t]+.*\n?)+)/m);
+  if (!linksMatch) return [];
+  const links: Array<{ to: string; type?: string }> = [];
+  let cur: { to?: string; type?: string } | null = null;
+  for (const line of linksMatch[1]!.split("\n")) {
+    if (!line.trim()) continue;
+    if (/^[ \t]+-/.test(line)) {
+      if (cur?.to) links.push(cur as { to: string; type?: string });
+      cur = {};
+    }
+    const toM = line.match(/to:\s*(\S.*)$/);
+    const typeM = line.match(/^[ \t]+type:\s*(\S.*)$/);
+    if (toM && cur) cur.to = toM[1]!.trim();
+    else if (typeM && cur) cur.type = typeM[1]!.trim();
+  }
+  if (cur?.to) links.push(cur as { to: string; type?: string });
+  return links;
+}
+
+// 端到端 schema 对称性(Spec P3 DoD):link_notes 写半 mergeFrontmatterLink 产出的
+// YAML frontmatter,经解析后喂回读半 buildAdjacencies,类型化边必须在 fwd/both 出现且不进 back。
+// 锁定读写两端共享同一个 links:[{to,type}] schema。
+test("link_notes 写入的 frontmatter.links 被 graph 邻接表识别(端到端 schema 对称)", () => {
+  const fromBody = "# from note\n";
+  // 用写半工具产出真实 YAML frontmatter(模拟 link_notes 在 from 笔记上落库)
+  const written = mergeFrontmatterLink(fromBody, { to: "people/z.md", type: "owner" });
+  // 解析回对象(模拟 Obsidian metadataCache 下一次读取)
+  const parsedLinks = parseLinksFromFrontmatter(written);
+  assert.equal(parsedLinks.length, 1, "应解析出 1 条 links 边");
+  assert.equal(parsedLinks[0]!.to, "people/z.md");
+  assert.equal(parsedLinks[0]!.type, "owner");
+
+  const app = mockApp(
+    {
+      "from.md": { content: written, frontmatter: { links: parsedLinks } },
+      "people/z.md": { content: "z" },
+    },
+    { resolvedLinks: {} },
+  );
+  const s = createVaultService(app);
+  const adj = s.buildAdjacencies();
+  assert.ok(adj.fwd.get("from.md")!.has("people/z.md"), "写半产出的 to 应进入 fwd 出边");
+  assert.ok(adj.both.get("from.md")!.has("people/z.md"), "写半产出的 to 应进入 both");
+  assert.ok(adj.both.get("people/z.md")!.has("from.md"), "反向 also 双向");
+  assert.ok(!adj.back.get("people/z.md")!.has("from.md"), "类型化边不进 back");
 });
