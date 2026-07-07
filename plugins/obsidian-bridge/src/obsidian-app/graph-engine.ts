@@ -112,3 +112,25 @@ function findBridges(adj: Adjacency): { from: string; to: string }[] {
   }
   return result;
 }
+
+export interface SimilarNode {
+  path: string;
+  score: number; // 0..1 Jaccard
+}
+
+// 共邻居 Jaccard 相似度:|N(x)∩N(y)| / |N(x)∪N(y)|,不含 x/y 自身。
+// 排除起点自身与零分节点;按 score 降序,截断至 limit(默认 10)。
+export function similar(adj: Adjacency, start: string, limit = 10): SimilarNode[] {
+  if (!adj.has(start)) return [];
+  const startN = adj.get(start) ?? new Set<string>();
+  const out: SimilarNode[] = [];
+  for (const [node, neighbors] of adj) {
+    if (node === start) continue;
+    let inter = 0;
+    for (const n of startN) if (neighbors.has(n)) inter++;
+    const union = startN.size + neighbors.size - inter;
+    const score = union === 0 ? 0 : inter / union;
+    if (score > 0) out.push({ path: node, score });
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, limit);
+}

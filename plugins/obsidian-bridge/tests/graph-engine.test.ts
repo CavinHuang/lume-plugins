@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neighbors, shortestPath, structure, type Adjacency } from "../src/obsidian-app/graph-engine.ts";
+import { neighbors, shortestPath, structure, similar, type Adjacency } from "../src/obsidian-app/graph-engine.ts";
 
 // 图: a-b-c-d(链), b-e(分支)
 function chainGraph(): Adjacency {
@@ -87,4 +87,73 @@ test("structure top 限制 hub 数量", () => {
   const rep = structure(g, 1);
   assert.equal(rep.hubs.length, 1);
   assert.equal(rep.hubs[0], "hub");
+});
+
+// --- similar(Jaccard 共邻居)---
+
+test("similar 按共邻居 Jaccard 排序", () => {
+  // x 与 y 都连到 shared1/shared2 → 共 2 邻居(高相似);x 与 z 仅共 shared1 → 共 1 邻居(低相似)
+  const g: Adjacency = new Map();
+  const add = (x: string, y: string) => { if (!g.has(x)) g.set(x, new Set()); if (!g.has(y)) g.set(y, new Set()); g.get(x)!.add(y); g.get(y)!.add(x); };
+  add("x", "shared1"); add("x", "shared2");
+  add("y", "shared1"); add("y", "shared2");
+  add("z", "shared1");
+  const sim = similar(g, "x", 10);
+  const y = sim.find((s) => s.path === "y")!;
+  const z = sim.find((s) => s.path === "z")!;
+  assert.ok(y.score > z.score, "y(共2邻居)相似度应高于 z(共1邻居)");
+  assert.ok(y.score > 0 && y.score <= 1, "score 应在 (0,1]");
+  assert.ok(z.score > 0 && z.score <= 1, "score 应在 (0,1]");
+  // 精确值:N(x)={shared1,shared2}, N(y)={shared1,shared2} → 2/2 = 1
+  assert.equal(y.score, 1);
+  // N(z)={shared1} → inter=1, union=2 → 1/2
+  assert.equal(z.score, 0.5);
+});
+
+test("similar 起点不存在返回空", () => {
+  assert.equal(similar(new Map(), "missing").length, 0);
+});
+
+test("similar 排除起点与零分节点,按分数降序", () => {
+  // x 邻居 {a, b};y 邻居 {a, b}(共 2,Jaccard=1);w 邻居 {a}(共 1,Jaccard=1/3);
+  // unrelated 邻居 {q}(共 0 → 不应出现);start x 自身不应出现
+  const g: Adjacency = new Map();
+  const add = (x: string, y: string) => { if (!g.has(x)) g.set(x, new Set()); if (!g.has(y)) g.set(y, new Set()); g.get(x)!.add(y); g.get(y)!.add(x); };
+  add("x", "a"); add("x", "b");
+  add("y", "a"); add("y", "b");
+  add("w", "a");
+  add("unrelated", "q");
+  const sim = similar(g, "x", 10);
+  // 起点自身被排除
+  assert.ok(!sim.some((s) => s.path === "x"), "起点自身不应出现");
+  // 零分节点被排除
+  assert.ok(!sim.some((s) => s.path === "unrelated"), "零分节点不应出现");
+  assert.ok(!sim.some((s) => s.path === "q"), "零分节点不应出现");
+  // 降序
+  for (let i = 1; i < sim.length; i++) {
+    assert.ok(sim[i - 1].score >= sim[i].score, "应按 score 降序");
+  }
+  // y(jaccard=1) 应排在 w(jaccard=1/3) 前
+  assert.equal(sim[0].path, "y");
+  // y Jaccard 精确值:|{a,b}∩{a,b}| / |{a,b}∪{a,b}| = 2/2 = 1
+  assert.equal(sim[0].score, 1);
+});
+
+test("similar limit 截断结果", () => {
+  const g: Adjacency = new Map();
+  const add = (x: string, y: string) => { if (!g.has(x)) g.set(x, new Set()); if (!g.has(y)) g.set(y, new Set()); g.get(x)!.add(y); g.get(y)!.add(x); };
+  // x 与 n1..n5 各共享一个不同的邻居 → 全部 score 相同(均为 1/3),limit=2 应只回 2 个
+  add("x", "s1"); add("x", "s2");
+  add("n1", "s1"); add("n2", "s1"); add("n3", "s1"); add("n4", "s1"); add("n5", "s1");
+  const sim = similar(g, "x", 2);
+  assert.equal(sim.length, 2);
+});
+
+test("similar 默认 limit=10", () => {
+  const g: Adjacency = new Map();
+  const add = (x: string, y: string) => { if (!g.has(x)) g.set(x, new Set()); if (!g.has(y)) g.set(y, new Set()); g.get(x)!.add(y); g.get(y)!.add(x); };
+  add("x", "shared");
+  for (let i = 1; i <= 15; i++) add(`n${i}`, "shared");
+  const sim = similar(g, "x");
+  assert.equal(sim.length, 10, "默认 limit=10");
 });
