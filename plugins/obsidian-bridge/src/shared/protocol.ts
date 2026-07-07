@@ -45,6 +45,9 @@ export interface NoteRef {
   path: string;
 }
 
+// 搜索命中结果的权威结构(单一事实源)。两端 search 实现应与此保持一致。
+// 当前各实现(vault-service / obsidian-client)仍用内联字面量构造,后续可改为 import 本类型复用。
+// mtime 为 P0 修复新增的真实文件修改时间(来自 file.stat),防止假时间戳。
 export interface SearchHit {
   path: string;
   snippet: string;

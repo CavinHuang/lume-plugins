@@ -48,6 +48,11 @@ export function createVaultService(app: ObsidianApp): VaultService {
     }
     // 合并 frontmatter.links(类型化关系边):作者主动声明的有向边,
     // 进入 fwd/both,但不进入 back(typed edge 有方向,反链语义由 back 专管 wiki-link 入边)。
+    //
+    // 注意(ghost node):frontmatter.links[].to 可能指向尚不存在的文件(与 resolvedLinks 不同,
+    // 后者只含已解析目标)。这些目标经 ensure() 进表后会成为「幽灵节点」(无内容、零入度),
+    // 进而可能抬高 structure().orphans 与 graphSimilar 的候选集。本行为按 spec §6 接受;
+    // 「过滤到已存在文件」作为后续增强延后。
     for (const f of app.vault.getMarkdownFiles()) {
       const cache = app.metadataCache.getFileCache(f);
       const fl = (cache?.frontmatter?.links as Array<{ to?: string }> | undefined) ?? [];

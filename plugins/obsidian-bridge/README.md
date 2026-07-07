@@ -5,9 +5,12 @@
 ## 能力
 
 - **MCP server**:`bridge_status` / `pair_with_code` / `forget_pairing` / `read_note` / `search_notes` / `upsert_note` / `delete_note` / `get_metadata` / `backlinks` / `read_palace`。
+- **图谱工具**:在 wiki-link 邻接图上回答结构问题——`graph_neighbors`(N 跳邻居,可指定 fwd/back/both)、`graph_path`(最短路径)、`graph_structure`(hub/orphan/桥边)、`graph_similar`(共邻居 Jaccard 相似);`link_notes` 写入关系(无 type 追加 `[[to]]` wiki 链,带 type 则在 frontmatter `links:[{to,type}]` 记录类型化边)。
 - **信任分层**:`raw/` 只读;`memory/inbox/` 自由写;`people/` 等长期记忆区写入需确认。
 - **Memory Palace**:`digest-note` 技能按 `palace/digest_note_room.md` 房间卡编排。
 - **digest-note 技能**:消化笔记 → `memory/inbox/<date>.md`。
+
+> P0 修复:`get_metadata`/`search_notes` 返回真实 `mtime`(取自 `file.stat`,不再假时间戳);写入受保护区返回 `409 needs_confirmation` 并附可执行提示,Agent 据此请求用户确认后带 `confirmed=true` 重试。
 
 ## Lume 市场设置流程
 
