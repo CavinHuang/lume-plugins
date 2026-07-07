@@ -64,6 +64,20 @@ test("structure 识别 hub / orphans / bridges", () => {
   assert.ok(rep.orphans.includes("lonely"));
   // c-d 是桥
   assert.ok(rep.bridges.some((br) => (br.from === "c" && br.to === "d") || (br.from === "d" && br.to === "c")));
+  // 度数高的节点排在前面(b 度 2,a 度 1)
+  assert.ok(rep.hubs.indexOf("b") < rep.hubs.indexOf("a"), "度数高的节点排在前面");
+});
+
+test("structure 环图中没有桥边(锁定 > 而非 >=)", () => {
+  const g: Adjacency = new Map();
+  const add = (x: string, y: string) => {
+    if (!g.has(x)) g.set(x, new Set());
+    if (!g.has(y)) g.set(y, new Set());
+    g.get(x)!.add(y); g.get(y)!.add(x);
+  };
+  add("r", "u"); add("u", "v"); add("v", "r");
+  const rep = structure(g, 10);
+  assert.equal(rep.bridges.length, 0);
 });
 
 test("structure top 限制 hub 数量", () => {
