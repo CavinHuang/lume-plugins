@@ -18,7 +18,7 @@ import { createFileTokenStore, type TokenStore } from "./token-store.ts";
 export function mergeFrontmatterLink(body: string, edge: { to: string; type: string }): string {
   const fmMatch = body.match(/^---\n([\s\S]*?)\n---\n?/);
   if (!fmMatch) {
-    return `---\nlinks:\n  - to: ${edge.to}\n    type: ${edge.type}\n---\n${body}`;
+    return `---\nlinks:\n  - to: ${edge.to}${edge.type ? `\n    type: ${edge.type}` : ""}\n---\n${body}`;
   }
   const fm = fmMatch[1];
   // 已有 links: 则解析-合并-序列化,避免文本注入破坏缩进/重复 to。
@@ -30,7 +30,7 @@ export function mergeFrontmatterLink(body: string, edge: { to: string; type: str
     return body.replace(fmMatch[0], `---\n${updated}\n---\n`);
   }
   // 无 links: 在 frontmatter 顶部新增
-  const newFm = `links:\n  - to: ${edge.to}\n    type: ${edge.type}\n` + fm;
+  const newFm = `links:\n  - to: ${edge.to}${edge.type ? `\n    type: ${edge.type}` : ""}\n` + fm;
   return body.replace(fmMatch[0], `---\n${newFm}\n---\n`);
 }
 
@@ -113,7 +113,9 @@ function mergeLinksBlock(block: string, edge: { to: string; type: string }): str
 
   let out = headerLine;
   for (const e of entries) {
-    out += `\n  - to: ${e.to}\n    type: ${e.type}`;
+    // 仅当 type 非空时才写出 `type:` 行——既有无类型条目(`- to: x.md`)必须逐字
+    // round-trip,不得被静默升级为 `type: null`(empty type emitted as YAML null)。
+    out += `\n  - to: ${e.to}${e.type ? `\n    type: ${e.type}` : ""}`;
   }
   if (trailing.length > 0) out += "\n" + trailing.join("\n");
   return out + "\n";

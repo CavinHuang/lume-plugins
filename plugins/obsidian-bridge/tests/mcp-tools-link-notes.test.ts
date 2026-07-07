@@ -184,3 +184,21 @@ test("mergeFrontmatterLink:links 块含 from:-prefixed 项时保守 fallback,既
   assert.match(out, /to: z\.md/);
   assert.match(out, /type: ref/);
 });
+
+// ===== mergeFrontmatterLink happy path:既有无类型条目不得漂移 =====
+
+test("mergeFrontmatterLink:既有无类型条目(- to: a.md)在合并新边后逐字保留,不得被追加空 type:", () => {
+  // 既有的无类型链接(length-1,无 type:)。旧序列化器总会写出 `    type: `,空值在
+  // YAML 中解析为 null,把用户 `links:[{to:"a.md"}]` 静默升级为 `[{to:"a.md",type:null}]`。
+  const body = "---\nlinks:\n  - to: a.md\ntitle: A\n---\n# A\n";
+  const out = mergeFrontmatterLink(body, { to: "b.md", type: "ref" });
+  // a.md 条目仍在,且其紧邻行不得出现 `type:`(即逐字保留 `- to: a.md`)。
+  assert.match(out, /- to: a\.md\n/);
+  assert.doesNotMatch(out, /- to: a\.md\n\s+type:/);
+  // 新边正常携带 type: ref。
+  assert.match(out, /- to: b\.md\n\s+type: ref/);
+  // 原 frontmatter 其它字段保留
+  assert.match(out, /title: A/);
+  // 正文保留
+  assert.match(out, /# A/);
+});

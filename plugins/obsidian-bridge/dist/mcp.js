@@ -21242,8 +21242,8 @@ function mergeFrontmatterLink(body, edge) {
   if (!fmMatch) {
     return `---
 links:
-  - to: ${edge.to}
-    type: ${edge.type}
+  - to: ${edge.to}${edge.type ? `
+    type: ${edge.type}` : ""}
 ---
 ${body}`;
   }
@@ -21259,8 +21259,8 @@ ${updated}
 `);
   }
   const newFm = `links:
-  - to: ${edge.to}
-    type: ${edge.type}
+  - to: ${edge.to}${edge.type ? `
+    type: ${edge.type}` : ""}
 ` + fm;
   return body.replace(fmMatch[0], `---
 ${newFm}
@@ -21327,8 +21327,8 @@ function mergeLinksBlock(block, edge) {
   let out = headerLine;
   for (const e of entries) {
     out += `
-  - to: ${e.to}
-    type: ${e.type}`;
+  - to: ${e.to}${e.type ? `
+    type: ${e.type}` : ""}`;
   }
   if (trailing.length > 0) out += "\n" + trailing.join("\n");
   return out + "\n";
