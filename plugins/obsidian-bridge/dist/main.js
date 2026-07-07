@@ -128,7 +128,7 @@ function createRouter(deps) {
     if (req.method === "GET" && req.path === "/health") {
       return {
         status: 200,
-        body: { ok: true, protocol: PROTOCOL_VERSION, appVersion: "0.1.1", vaultName: deps.vaultName }
+        body: { ok: true, protocol: PROTOCOL_VERSION, appVersion: deps.appVersion, vaultName: deps.vaultName }
       };
     }
     if (req.method === "POST" && req.path === "/pair") {
@@ -146,7 +146,7 @@ function createRouter(deps) {
       if (level === "needs_confirmation" && req.headers[CONFIRMED_HEADER] !== "true") {
         return err(
           ERROR_CODES.needs_confirmation,
-          `writing to ${path} requires confirmation`,
+          `writing to ${path} requires confirmation; retry the same request with header X-Confirmed: true (or MCP param confirmed=true)`,
           409,
           { path, method: req.method }
         );
@@ -204,6 +204,30 @@ function createRouter(deps) {
       const md = await deps.getRoomMarkdown(room);
       return { status: 200, body: parseRoomCard(md) };
     }
+    if (req.method === "GET" && req.path === "/graph/neighbors") {
+      const q = req.query ?? {};
+      const depth = Math.min(Math.max(Number(q.depth ?? 1) || 1, 1), 3);
+      const direction = q.direction === "fwd" || q.direction === "back" ? q.direction : "both";
+      const nodes = await deps.vault.graphNeighbors(q.path ?? "", depth, direction);
+      return { status: 200, body: { nodes } };
+    }
+    if (req.method === "GET" && req.path === "/graph/path") {
+      const q = req.query ?? {};
+      const path = await deps.vault.graphPath(q.from ?? "", q.to ?? "");
+      return { status: 200, body: { path, hops: Math.max(0, path.length - 1) } };
+    }
+    if (req.method === "GET" && req.path === "/graph/structure") {
+      const q = req.query ?? {};
+      const top = q.top ? Math.min(Math.max(Number(q.top) || 10, 1), 100) : 10;
+      return { status: 200, body: deps.vault.graphStructure(top) };
+    }
+    if (req.method === "GET" && req.path === "/graph/similar") {
+      const q = req.query ?? {};
+      const rawLimit = q.limit !== void 0 ? Number(q.limit) : 10;
+      const limit = Math.min(Math.max(Number.isNaN(rawLimit) ? 10 : rawLimit, 1), 50);
+      const similarNodes = deps.vault.graphSimilar(q.path ?? "", limit);
+      return { status: 200, body: { similar: similarNodes } };
+    }
     if (req.method === "GET" && req.path === "/events") {
       return err(ERROR_CODES.not_found, "events stream not implemented in Phase 1", 501);
     }
@@ -217,6 +241,7 @@ function startServer(opts) {
     vault: opts.vault,
     pairing: opts.pairing,
     vaultName: opts.vaultName,
+    appVersion: opts.appVersion,
     getRoomMarkdown: opts.getRoomMarkdown
   });
   async function readBody(req) {
@@ -264,11 +289,146 @@ function startServer(opts) {
   return { close: () => server.close(), port: opts.port };
 }
 
+// src/obsidian-app/graph-engine.ts
+function neighbors(adj, start, depth) {
+  const out = [];
+  if (!adj.has(start) || depth <= 0) return out;
+  const seen = /* @__PURE__ */ new Set([start]);
+  let frontier = [{ path: start, depth: 0, via: start }];
+  for (let d = 1; d <= depth; d++) {
+    const next = [];
+    for (const node of frontier) {
+      for (const n of adj.get(node.path) ?? /* @__PURE__ */ new Set()) {
+        if (seen.has(n)) continue;
+        seen.add(n);
+        next.push({ path: n, depth: d, via: node.path });
+      }
+    }
+    out.push(...next);
+    frontier = next;
+    if (next.length === 0) break;
+  }
+  return out;
+}
+function shortestPath(adj, from, to) {
+  if (!adj.has(from) || !adj.has(to)) return [];
+  if (from === to) return [from];
+  const prev = /* @__PURE__ */ new Map();
+  const seen = /* @__PURE__ */ new Set([from]);
+  const queue = [from];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const n of adj.get(cur) ?? /* @__PURE__ */ new Set()) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      prev.set(n, cur);
+      if (n === to) {
+        const path = [to];
+        let c = to;
+        while (c !== from) {
+          c = prev.get(c);
+          path.unshift(c);
+        }
+        return path;
+      }
+      queue.push(n);
+    }
+  }
+  return [];
+}
+function structure(adj, top = 10) {
+  const hubs = [...adj.entries()].filter(([, ns]) => ns.size > 0).sort((a, b) => b[1].size - a[1].size).slice(0, top).map(([n]) => n);
+  const orphans = [...adj.entries()].filter(([, ns]) => ns.size === 0).map(([n]) => n);
+  const bridges = findBridges(adj);
+  return { hubs, orphans, bridges };
+}
+function findBridges(adj) {
+  const result = [];
+  const disc = /* @__PURE__ */ new Map();
+  const low = /* @__PURE__ */ new Map();
+  const visited = /* @__PURE__ */ new Set();
+  let time = 0;
+  function dfs(u, parent) {
+    visited.add(u);
+    disc.set(u, time);
+    low.set(u, time);
+    time++;
+    for (const v of adj.get(u) ?? /* @__PURE__ */ new Set()) {
+      if (!visited.has(v)) {
+        dfs(v, u);
+        low.set(u, Math.min(low.get(u), low.get(v)));
+        if (low.get(v) > disc.get(u)) {
+          result.push(u < v ? { from: u, to: v } : { from: v, to: u });
+        }
+      } else if (v !== parent) {
+        low.set(u, Math.min(low.get(u), disc.get(v)));
+      }
+    }
+  }
+  for (const node of adj.keys()) {
+    if (!visited.has(node)) dfs(node, null);
+  }
+  return result;
+}
+function similar(adj, start, limit = 10) {
+  if (!adj.has(start)) return [];
+  const startN = adj.get(start) ?? /* @__PURE__ */ new Set();
+  const out = [];
+  for (const [node, neighbors2] of adj) {
+    if (node === start) continue;
+    let inter = 0;
+    for (const n of startN) if (neighbors2.has(n)) inter++;
+    const union = startN.size + neighbors2.size - inter;
+    const score = union === 0 ? 0 : inter / union;
+    if (score > 0) out.push({ path: node, score });
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
 // src/obsidian-app/vault-service.ts
 function createVaultService(app) {
+  function buildAdjacencies() {
+    const fwd = /* @__PURE__ */ new Map();
+    const back = /* @__PURE__ */ new Map();
+    const both = /* @__PURE__ */ new Map();
+    const ensure = (p) => {
+      if (!fwd.has(p)) {
+        fwd.set(p, /* @__PURE__ */ new Set());
+        back.set(p, /* @__PURE__ */ new Set());
+        both.set(p, /* @__PURE__ */ new Set());
+      }
+    };
+    for (const f of app.vault.getMarkdownFiles()) ensure(f.path);
+    for (const [src, links] of Object.entries(app.metadataCache.resolvedLinks)) {
+      ensure(src);
+      for (const tgt of Object.keys(links)) {
+        ensure(tgt);
+        fwd.get(src).add(tgt);
+        back.get(tgt).add(src);
+        both.get(src).add(tgt);
+        both.get(tgt).add(src);
+      }
+    }
+    for (const f of app.vault.getMarkdownFiles()) {
+      const cache = app.metadataCache.getFileCache(f);
+      const fl = cache?.frontmatter?.links ?? [];
+      for (const edge of fl) {
+        const to = edge?.to;
+        if (!to) continue;
+        ensure(f.path);
+        ensure(to);
+        fwd.get(f.path).add(to);
+        both.get(f.path).add(to);
+        both.get(to).add(f.path);
+      }
+    }
+    return { fwd, back, both };
+  }
   return {
     async read(path) {
-      return app.vault.read(app.vault.getAbstractFileByPath(path));
+      const f = app.vault.getAbstractFileByPath(path);
+      if (!f) throw new Error(`not found: ${path}`);
+      return app.vault.read(f);
     },
     async exists(path) {
       return app.vault.getAbstractFileByPath(path) !== null;
@@ -297,15 +457,25 @@ function createVaultService(app) {
       const ql = q.toLowerCase();
       const hits = [];
       for (const f of app.vault.getMarkdownFiles()) {
-        const content = await app.vault.read(f);
-        const idx = content.toLowerCase().indexOf(ql);
-        if (idx >= 0) {
-          const start = Math.max(0, idx - 30);
-          hits.push({
-            path: f.path,
-            snippet: content.slice(start, idx + ql.length + 30),
-            score: 1
-          });
+        const mtime = f.stat?.mtime ?? 0;
+        if (opts.type === "tag") {
+          const cache = app.metadataCache.getFileCache(f);
+          const tags = cache?.tags ? Object.keys(cache.tags).map((t) => t.replace(/^#/, "").toLowerCase()) : [];
+          if (tags.some((t) => t.includes(ql))) {
+            hits.push({ path: f.path, snippet: `#${q}`, score: 1, mtime });
+          }
+        } else {
+          const content = await app.vault.read(f);
+          const idx = content.toLowerCase().indexOf(ql);
+          if (idx >= 0) {
+            const start = Math.max(0, idx - 30);
+            hits.push({
+              path: f.path,
+              snippet: content.slice(start, idx + ql.length + 30),
+              score: 1,
+              mtime
+            });
+          }
         }
         if (hits.length >= limit) break;
       }
@@ -315,7 +485,12 @@ function createVaultService(app) {
       const f = app.vault.getAbstractFileByPath(path);
       const cache = f ? app.metadataCache.getFileCache(f) : null;
       const tags = cache?.tags ? Object.keys(cache.tags).map((t) => t.replace(/^#/, "")) : [];
-      return { tags, frontmatter: cache?.frontmatter ?? {}, mtime: 0, ctime: 0 };
+      return {
+        tags,
+        frontmatter: cache?.frontmatter ?? {},
+        mtime: f?.stat?.mtime ?? 0,
+        ctime: f?.stat?.ctime ?? 0
+      };
     },
     async backlinks(path) {
       const target = path.replace(/\.md$/, "");
@@ -324,6 +499,13 @@ function createVaultService(app) {
         for (const [tgt, count] of Object.entries(links)) {
           if (tgt === path || tgt.replace(/\.md$/, "") === target) {
             out.push({ fromPath: src, occurrences: count });
+          }
+        }
+      }
+      for (const [src, links] of Object.entries(app.metadataCache.unresolvedLinks)) {
+        for (const link of links) {
+          if (link === path || link === target || link.replace(/\.md$/, "") === target) {
+            out.push({ fromPath: src, occurrences: 1 });
           }
         }
       }
@@ -346,6 +528,22 @@ function createVaultService(app) {
       const orphans = allFiles.filter((p) => !connected.has(p));
       const rawUndigested = allFiles.filter((p) => p.startsWith("raw/"));
       return { brokenLinks, orphans, rawUndigested };
+    },
+    buildAdjacencies,
+    graphNeighbors(path, depth, direction) {
+      const adj = buildAdjacencies();
+      const map = direction === "fwd" ? adj.fwd : direction === "back" ? adj.back : adj.both;
+      return neighbors(map, path, depth);
+    },
+    graphPath(from, to) {
+      return shortestPath(buildAdjacencies().both, from, to);
+    },
+    graphStructure(top) {
+      return structure(buildAdjacencies().both, top);
+    },
+    // 共邻居 Jaccard 相似度(Task 11):同步,委托给 graph-engine.similar。
+    graphSimilar(path, limit) {
+      return similar(buildAdjacencies().both, path, limit);
     }
   };
 }
@@ -538,6 +736,7 @@ var ObsidianBridgePlugin = class extends import_obsidian.Plugin {
       vault: createVaultService(this.app),
       pairing,
       vaultName: this.app.vault.getName(),
+      appVersion: this.manifest.version,
       getRoomMarkdown: async (room) => {
         const f = this.app.vault.getAbstractFileByPath(`palace/${room}.md`);
         return f ? await this.app.vault.read(f) : "## \u89E6\u53D1\u573A\u666F\n(\u7A7A\u623F\u95F4)\n";

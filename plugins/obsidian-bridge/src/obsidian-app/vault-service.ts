@@ -1,14 +1,15 @@
 import type { VaultService } from "./http-router.ts";
+import { neighbors, shortestPath, structure, similar, type Adjacency } from "./graph-engine.ts";
 
 // 最小 Obsidian 类型(避免强耦合 obsidian 包;真实 app 满足结构即可)
 interface ObsidianApp {
   vault: {
-    getAbstractFileByPath(p: string): { path: string } | null;
+    getAbstractFileByPath(p: string): { path: string; stat?: { mtime: number; ctime: number } } | null;
     read(f: { path: string }): Promise<string>;
     create(p: string, c: string): Promise<{ path: string }>;
     modify(f: { path: string }, c: string): Promise<void>;
     delete(f: { path: string }): Promise<void>;
-    getMarkdownFiles(): { path: string }[];
+    getMarkdownFiles(): { path: string; stat?: { mtime: number; ctime: number } }[];
   };
   metadataCache: {
     getFileCache(f: { path: string }): {
@@ -21,9 +22,58 @@ interface ObsidianApp {
 }
 
 export function createVaultService(app: ObsidianApp): VaultService {
+  // 图谱适配层:基于 metadataCache.resolvedLinks 构建 fwd/back/both 三张邻接表。
+  // 孤立节点也作为 key 保留(空 Set),供 Task 7 structure/orphans 使用。
+  function buildAdjacencies(): { fwd: Adjacency; back: Adjacency; both: Adjacency } {
+    const fwd: Adjacency = new Map();
+    const back: Adjacency = new Map();
+    const both: Adjacency = new Map();
+    const ensure = (p: string) => {
+      if (!fwd.has(p)) {
+        fwd.set(p, new Set());
+        back.set(p, new Set());
+        both.set(p, new Set());
+      }
+    };
+    for (const f of app.vault.getMarkdownFiles()) ensure(f.path);
+    for (const [src, links] of Object.entries(app.metadataCache.resolvedLinks)) {
+      ensure(src);
+      for (const tgt of Object.keys(links)) {
+        ensure(tgt);
+        fwd.get(src)!.add(tgt);
+        back.get(tgt)!.add(src);
+        both.get(src)!.add(tgt);
+        both.get(tgt)!.add(src);
+      }
+    }
+    // 合并 frontmatter.links(类型化关系边):作者主动声明的有向边,
+    // 进入 fwd/both,但不进入 back(typed edge 有方向,反链语义由 back 专管 wiki-link 入边)。
+    //
+    // 注意(ghost node):frontmatter.links[].to 可能指向尚不存在的文件(与 resolvedLinks 不同,
+    // 后者只含已解析目标)。这些目标经 ensure() 进表后会成为「幽灵节点」(无内容、零入度),
+    // 进而可能抬高 structure().orphans 与 graphSimilar 的候选集。本行为按 spec §6 接受;
+    // 「过滤到已存在文件」作为后续增强延后。
+    for (const f of app.vault.getMarkdownFiles()) {
+      const cache = app.metadataCache.getFileCache(f);
+      const fl = (cache?.frontmatter?.links as Array<{ to?: string }> | undefined) ?? [];
+      for (const edge of fl) {
+        const to = edge?.to;
+        if (!to) continue; // 缺 to 视为 malformed,跳过
+        ensure(f.path);
+        ensure(to);
+        fwd.get(f.path)!.add(to);
+        both.get(f.path)!.add(to);
+        both.get(to)!.add(f.path);
+      }
+    }
+    return { fwd, back, both };
+  }
+
   return {
     async read(path) {
-      return app.vault.read(app.vault.getAbstractFileByPath(path)!);
+      const f = app.vault.getAbstractFileByPath(path);
+      if (!f) throw new Error(`not found: ${path}`);
+      return app.vault.read(f);
     },
     async exists(path) {
       return app.vault.getAbstractFileByPath(path) !== null;
@@ -57,17 +107,29 @@ export function createVaultService(app: ObsidianApp): VaultService {
     async search(q, opts) {
       const limit = opts.limit ?? 50;
       const ql = q.toLowerCase();
-      const hits: { path: string; snippet: string; score: number }[] = [];
+      const hits: { path: string; snippet: string; score: number; mtime: number }[] = [];
       for (const f of app.vault.getMarkdownFiles()) {
-        const content = await app.vault.read(f);
-        const idx = content.toLowerCase().indexOf(ql);
-        if (idx >= 0) {
-          const start = Math.max(0, idx - 30);
-          hits.push({
-            path: f.path,
-            snippet: content.slice(start, idx + ql.length + 30),
-            score: 1,
-          });
+        const mtime = f.stat?.mtime ?? 0;
+        if (opts.type === "tag") {
+          const cache = app.metadataCache.getFileCache(f);
+          const tags = cache?.tags
+            ? Object.keys(cache.tags).map((t) => t.replace(/^#/, "").toLowerCase())
+            : [];
+          if (tags.some((t) => t.includes(ql))) {
+            hits.push({ path: f.path, snippet: `#${q}`, score: 1, mtime });
+          }
+        } else {
+          const content = await app.vault.read(f);
+          const idx = content.toLowerCase().indexOf(ql);
+          if (idx >= 0) {
+            const start = Math.max(0, idx - 30);
+            hits.push({
+              path: f.path,
+              snippet: content.slice(start, idx + ql.length + 30),
+              score: 1,
+              mtime,
+            });
+          }
         }
         if (hits.length >= limit) break;
       }
@@ -77,15 +139,29 @@ export function createVaultService(app: ObsidianApp): VaultService {
       const f = app.vault.getAbstractFileByPath(path);
       const cache = f ? app.metadataCache.getFileCache(f) : null;
       const tags = cache?.tags ? Object.keys(cache.tags).map((t) => t.replace(/^#/, "")) : [];
-      return { tags, frontmatter: cache?.frontmatter ?? {}, mtime: 0, ctime: 0 };
+      return {
+        tags,
+        frontmatter: cache?.frontmatter ?? {},
+        mtime: f?.stat?.mtime ?? 0,
+        ctime: f?.stat?.ctime ?? 0,
+      };
     },
     async backlinks(path) {
       const target = path.replace(/\.md$/, "");
       const out: { fromPath: string; occurrences: number }[] = [];
+      // 已解析反链
       for (const [src, links] of Object.entries(app.metadataCache.resolvedLinks)) {
         for (const [tgt, count] of Object.entries(links)) {
           if (tgt === path || tgt.replace(/\.md$/, "") === target) {
             out.push({ fromPath: src, occurrences: count });
+          }
+        }
+      }
+      // 断链反链(有人 [[path]] 但 path 不存在)
+      for (const [src, links] of Object.entries(app.metadataCache.unresolvedLinks)) {
+        for (const link of links) {
+          if (link === path || link === target || link.replace(/\.md$/, "") === target) {
+            out.push({ fromPath: src, occurrences: 1 });
           }
         }
       }
@@ -111,6 +187,22 @@ export function createVaultService(app: ObsidianApp): VaultService {
       const orphans = allFiles.filter((p) => !connected.has(p));
       const rawUndigested = allFiles.filter((p) => p.startsWith("raw/"));
       return { brokenLinks, orphans, rawUndigested };
+    },
+    buildAdjacencies,
+    graphNeighbors(path, depth, direction) {
+      const adj = buildAdjacencies();
+      const map = direction === "fwd" ? adj.fwd : direction === "back" ? adj.back : adj.both;
+      return neighbors(map, path, depth);
+    },
+    graphPath(from, to) {
+      return shortestPath(buildAdjacencies().both, from, to);
+    },
+    graphStructure(top) {
+      return structure(buildAdjacencies().both, top);
+    },
+    // 共邻居 Jaccard 相似度(Task 11):同步,委托给 graph-engine.similar。
+    graphSimilar(path, limit) {
+      return similar(buildAdjacencies().both, path, limit);
     },
   };
 }

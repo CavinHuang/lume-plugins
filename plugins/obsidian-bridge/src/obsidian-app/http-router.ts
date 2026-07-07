@@ -7,6 +7,7 @@ import {
 import { classifyTrust, CONFIRMED_HEADER, isWrite } from "./trust-policy.ts";
 import { parseRoomCard } from "./palace.ts";
 import type { PairingStore } from "./pairing-store.ts";
+import { type Adjacency, type StructureReport, type SimilarNode } from "./graph-engine.ts";
 
 export interface VaultService {
   read(path: string): Promise<string>;
@@ -20,7 +21,7 @@ export interface VaultService {
   search(
     q: string,
     opts: { type?: string; limit?: number },
-  ): Promise<{ path: string; snippet: string; score: number }[]>;
+  ): Promise<{ path: string; snippet: string; score: number; mtime: number }[]>;
   metadata(path: string): Promise<{
     tags: string[];
     frontmatter: Record<string, unknown>;
@@ -34,6 +35,19 @@ export interface VaultService {
     orphans: string[];
     rawUndigested: string[];
   }>;
+  // 图谱适配层(Task 6):基于 metadataCache.resolvedLinks 构建邻接表 + 邻居/最短路径查询
+  buildAdjacencies(): { fwd: Adjacency; back: Adjacency; both: Adjacency };
+  graphNeighbors(
+    path: string,
+    depth: number,
+    direction: "fwd" | "back" | "both",
+  ): { path: string; depth: number; via: string }[];
+  graphPath(from: string, to: string): string[];
+  // 结构分析(Task 9):hub(度数 top-N)、orphans(零度)、bridges(Tarjan 桥边)。
+  // 同步:与 graphNeighbors/graphPath 一致,基于内存邻接表。
+  graphStructure(top?: number): StructureReport;
+  // 共邻居 Jaccard 相似度(Task 11):同步,委托给 graph-engine.similar。
+  graphSimilar(path: string, limit?: number): SimilarNode[];
 }
 
 export interface RouterRequest {
@@ -59,6 +73,7 @@ export interface RouterDeps {
   vault: VaultService;
   pairing: PairingStore;
   vaultName: string;
+  appVersion: string;
   getRoomMarkdown: (room: string) => Promise<string>;
 }
 
@@ -83,7 +98,7 @@ export function createRouter(deps: RouterDeps) {
     if (req.method === "GET" && req.path === "/health") {
       return {
         status: 200,
-        body: { ok: true, protocol: PROTOCOL_VERSION, appVersion: "0.1.1", vaultName: deps.vaultName },
+        body: { ok: true, protocol: PROTOCOL_VERSION, appVersion: deps.appVersion, vaultName: deps.vaultName },
       };
     }
 
@@ -107,7 +122,7 @@ export function createRouter(deps: RouterDeps) {
       if (level === "needs_confirmation" && req.headers[CONFIRMED_HEADER] !== "true") {
         return err(
           ERROR_CODES.needs_confirmation,
-          `writing to ${path} requires confirmation`,
+          `writing to ${path} requires confirmation; retry the same request with header X-Confirmed: true (or MCP param confirmed=true)`,
           409,
           { path, method: req.method },
         );
@@ -174,6 +189,37 @@ export function createRouter(deps: RouterDeps) {
       const room = req.path.slice("/palace/".length);
       const md = await deps.getRoomMarkdown(room);
       return { status: 200, body: parseRoomCard(md) };
+    }
+    // /graph/neighbors(N 跳邻居;depth 钳制 1..3,direction 规范化 fwd|back|both)
+    if (req.method === "GET" && req.path === "/graph/neighbors") {
+      const q = req.query ?? {};
+      const depth = Math.min(Math.max(Number(q.depth ?? 1) || 1, 1), 3); // clamp 1..3
+      const direction = (q.direction === "fwd" || q.direction === "back" ? q.direction : "both") as
+        | "fwd"
+        | "back"
+        | "both";
+      const nodes = await deps.vault.graphNeighbors(q.path ?? "", depth, direction);
+      return { status: 200, body: { nodes } };
+    }
+    // /graph/path(最短路径 + hops)
+    if (req.method === "GET" && req.path === "/graph/path") {
+      const q = req.query ?? {};
+      const path = await deps.vault.graphPath(q.from ?? "", q.to ?? "");
+      return { status: 200, body: { path, hops: Math.max(0, path.length - 1) } };
+    }
+    // /graph/structure(hub/孤岛/桥;top 钳制 1..100,默认 10)
+    if (req.method === "GET" && req.path === "/graph/structure") {
+      const q = req.query ?? {};
+      const top = q.top ? Math.min(Math.max(Number(q.top) || 10, 1), 100) : 10;
+      return { status: 200, body: deps.vault.graphStructure(top) };
+    }
+    // /graph/similar(共邻居 Jaccard;limit 钳制 1..50,默认 10;非数字回退 10)
+    if (req.method === "GET" && req.path === "/graph/similar") {
+      const q = req.query ?? {};
+      const rawLimit = q.limit !== undefined ? Number(q.limit) : 10;
+      const limit = Math.min(Math.max(Number.isNaN(rawLimit) ? 10 : rawLimit, 1), 50);
+      const similarNodes = deps.vault.graphSimilar(q.path ?? "", limit);
+      return { status: 200, body: { similar: similarNodes } };
     }
     // /events(SSE 占位:Phase 1 返回 501,Phase 2 实现推送)
     if (req.method === "GET" && req.path === "/events") {

@@ -1,10 +1,11 @@
 {
   "name": "obsidian-bridge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "tsx --test \"tests/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
     "build:obsidian": "node esbuild.config.mjs --target=obsidian",
     "build:mcp": "node esbuild.config.mjs --target=mcp"
   },

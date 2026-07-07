@@ -12,12 +12,14 @@ export function startServer(opts: {
   vault: VaultService;
   pairing: PairingStore;
   vaultName: string;
+  appVersion: string;
   getRoomMarkdown: (room: string) => Promise<string>;
 }): ServerHandle {
   const handle = createRouter({
     vault: opts.vault,
     pairing: opts.pairing,
     vaultName: opts.vaultName,
+    appVersion: opts.appVersion,
     getRoomMarkdown: opts.getRoomMarkdown,
   });
 

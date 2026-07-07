@@ -22,6 +22,7 @@ export default class ObsidianBridgePlugin extends Plugin {
       vault: createVaultService(this.app as unknown as Parameters<typeof createVaultService>[0]),
       pairing,
       vaultName: this.app.vault.getName(),
+      appVersion: this.manifest.version,
       getRoomMarkdown: async (room) => {
         const f = this.app.vault.getAbstractFileByPath(`palace/${room}.md`);
         return f ? await this.app.vault.read(f as never) : "## 触发场景\n(空房间)\n";

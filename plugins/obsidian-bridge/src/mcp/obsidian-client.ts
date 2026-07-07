@@ -24,7 +24,7 @@ export interface ObsidianClient {
   search(
     q: string,
     opts?: { type?: string; limit?: number },
-  ): Promise<{ path: string; snippet: string; score: number }[]>;
+  ): Promise<{ path: string; snippet: string; score: number; mtime: number }[]>;
   metadata(path: string): Promise<{
     tags: string[];
     frontmatter: Record<string, unknown>;
@@ -45,6 +45,18 @@ export interface ObsidianClient {
     orphans: string[];
     rawUndigested: string[];
   }>;
+  graphNeighbors(
+    path: string,
+    depth: number,
+    direction: "fwd" | "back" | "both",
+  ): Promise<{ path: string; depth: number; via: string }[]>;
+  graphPath(from: string, to: string): Promise<{ path: string[]; hops: number }>;
+  graphStructure(top?: number): Promise<{
+    hubs: string[];
+    orphans: string[];
+    bridges: { from: string; to: string }[];
+  }>;
+  graphSimilar(path: string, limit?: number): Promise<{ path: string; score: number }[]>;
 }
 
 export interface ClientDeps {
@@ -137,5 +149,20 @@ export function createObsidianClient(deps: ClientDeps): ObsidianClient {
     readPalace: (room) => req("GET", `/palace/${encodeURIComponent(room)}`),
     listNotes: async (prefix) => (await req("GET", "/notes", { query: { list: prefix } })).paths,
     diagnostics: () => req("GET", "/diagnostics"),
+    graphNeighbors: async (path, depth, direction) =>
+      (
+        await req("GET", "/graph/neighbors", {
+          query: { path, depth: String(depth), direction },
+        })
+      ).nodes,
+    graphPath: async (from, to) => req("GET", "/graph/path", { query: { from, to } }),
+    graphStructure: (top) =>
+      req("GET", "/graph/structure", top ? { query: { top: String(top) } } : {}),
+    graphSimilar: async (path, limit) =>
+      (
+        await req("GET", "/graph/similar", {
+          query: { path, ...(limit ? { limit: String(limit) } : {}) },
+        })
+      ).similar,
   };
 }

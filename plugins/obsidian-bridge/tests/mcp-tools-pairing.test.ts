@@ -35,6 +35,10 @@ function makeClient(): ObsidianClient {
     }),
     listNotes: async () => [],
     diagnostics: async () => ({ brokenLinks: [], orphans: [], rawUndigested: [] }),
+    graphNeighbors: async () => [],
+    graphPath: async () => ({ path: [], hops: 0 }),
+    graphStructure: async () => ({ hubs: [], orphans: [], bridges: [] }),
+    graphSimilar: async () => [],
   };
 }
 
