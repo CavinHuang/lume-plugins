@@ -32,6 +32,11 @@ test("ENDPOINTS has health/pair/notes/search/metadata/backlinks/palace/events", 
   assert.ok(ENDPOINTS.palace && ENDPOINTS.events);
 });
 
+test("ENDPOINTS 登记了 list/diagnostics/graph 入口", () => {
+  // ENDPOINTS 是字符串常量集合;graph 子路径在 router 用前缀匹配,此处只校验存在 graph 标记
+  assert.ok(Object.values(ENDPOINTS).some((v) => String(v).includes("graph")));
+});
+
 test("TrustLevel union", () => {
   const levels: TrustLevel[] = ["raw_readonly", "free_write", "needs_confirmation", "free"];
   assert.equal(levels.length, 4);

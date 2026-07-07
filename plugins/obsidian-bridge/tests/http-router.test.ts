@@ -37,6 +37,7 @@ function mockVault(over: Partial<VaultService> = {}): VaultService {
 const base = {
   pairing: createPairingStore({ ttlMs: 600000, now: () => 1000, random: () => "112233" }),
   vaultName: "TestVault",
+  appVersion: "0.0.0-test",
   getRoomMarkdown: async () => "## 触发场景\nx\n",
 };
 
@@ -165,6 +166,12 @@ test("GET /diagnostics 返回体检数据", async () => {
   assert.deepEqual((res.body as { brokenLinks: unknown[] }).brokenLinks, [
     { from: "n.md", link: "bad" },
   ]);
+});
+
+test("/health 的 appVersion 来自注入而非写死", async () => {
+  const r = createRouter({ ...base, vault: mockVault(), appVersion: "9.9.9" } as any);
+  const res = await r({ method: "GET", path: "/health", headers: {}, body: "" });
+  assert.equal((res.body as { appVersion: string }).appVersion, "9.9.9");
 });
 
 interface ApiErr {

@@ -128,7 +128,7 @@ function createRouter(deps) {
     if (req.method === "GET" && req.path === "/health") {
       return {
         status: 200,
-        body: { ok: true, protocol: PROTOCOL_VERSION, appVersion: "0.1.1", vaultName: deps.vaultName }
+        body: { ok: true, protocol: PROTOCOL_VERSION, appVersion: deps.appVersion, vaultName: deps.vaultName }
       };
     }
     if (req.method === "POST" && req.path === "/pair") {
@@ -217,6 +217,7 @@ function startServer(opts) {
     vault: opts.vault,
     pairing: opts.pairing,
     vaultName: opts.vaultName,
+    appVersion: opts.appVersion,
     getRoomMarkdown: opts.getRoomMarkdown
   });
   async function readBody(req) {
@@ -562,6 +563,7 @@ var ObsidianBridgePlugin = class extends import_obsidian.Plugin {
       vault: createVaultService(this.app),
       pairing,
       vaultName: this.app.vault.getName(),
+      appVersion: this.manifest.version,
       getRoomMarkdown: async (room) => {
         const f = this.app.vault.getAbstractFileByPath(`palace/${room}.md`);
         return f ? await this.app.vault.read(f) : "## \u89E6\u53D1\u573A\u666F\n(\u7A7A\u623F\u95F4)\n";

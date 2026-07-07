@@ -21,6 +21,7 @@ export const ENDPOINTS = {
   metadata: "/metadata",
   backlinks: "/backlinks",
   palace: "/palace", // 实际路径 /palace/:room
+  graph: "/graph", // 实际路径 /graph/:op
   events: "/events",
 } as const;
 

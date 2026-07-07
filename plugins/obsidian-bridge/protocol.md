@@ -12,13 +12,19 @@ Lume 端 ↔ Obsidian 端,本地 HTTP,`127.0.0.1:43112`。
 | GET | /health | 否 | 探测 + 协议/vault 名 |
 | POST | /pair | 否(配对码) | 配对码换 token |
 | GET | /notes?path= | 是 | 读笔记 |
+| GET | /notes?list= | 是 | 列出前缀下笔记路径 |
 | POST | /notes | 是 | 创建/覆盖(信任分级) |
 | PATCH | /notes | 是 | 部分更新 |
 | DELETE | /notes?path= | 是 | 删除 |
 | GET | /search?q=&type=&limit= | 是 | 全文/标签/路径检索 |
 | GET | /metadata?path= | 是 | 标签/属性/时间 |
 | GET | /backlinks?path= | 是 | 反链 |
+| GET | /diagnostics | 是 | 断链/孤儿/raw 未消化体检 |
 | GET | /palace/:room | 是 | 读房间卡 |
+| GET | /graph/neighbors | 是 | N 跳邻居(P1) |
+| GET | /graph/path | 是 | 最短路径(P1) |
+| GET | /graph/structure | 是 | hub/孤岛/桥(P2) |
+| GET | /graph/similar | 是 | 相似推荐(P3) |
 | GET | /events | 是 | SSE 事件流(Phase 2) |
 
 ## 错误码
