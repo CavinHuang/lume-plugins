@@ -93,6 +93,21 @@ test("POST /notes 到 people/ 无 X-Confirmed 返回 409 needs_confirmation", as
   assert.equal((res.body as ApiErr).error.code, ERROR_CODES.needs_confirmation);
 });
 
+test("POST /notes 到 people/ 的 409 message 含路径与重试指引", async () => {
+  const token = freshToken();
+  const r = createRouter({ ...base, vault: mockVault() });
+  const res = await r({
+    method: "POST",
+    path: "/notes",
+    headers: { authorization: `Bearer ${token}` },
+    body: { path: "people/zhang.md", content: "x" },
+  });
+  assert.equal(res.status, 409);
+  const msg = (res.body as ApiErr).error.message;
+  assert.match(msg, /people\/zhang\.md/);
+  assert.match(msg, /confirmed/);
+});
+
 test("协议版本不匹配返回 426", async () => {
   const r = createRouter({ ...base, vault: mockVault() });
   const res = await r({

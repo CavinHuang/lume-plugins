@@ -107,7 +107,7 @@ export function createRouter(deps: RouterDeps) {
       if (level === "needs_confirmation" && req.headers[CONFIRMED_HEADER] !== "true") {
         return err(
           ERROR_CODES.needs_confirmation,
-          `writing to ${path} requires confirmation`,
+          `writing to ${path} requires confirmation; retry the same request with header X-Confirmed: true (or MCP param confirmed=true)`,
           409,
           { path, method: req.method },
         );

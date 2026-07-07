@@ -21364,6 +21364,9 @@ function formatBridgeToolError(error2) {
   if (error2 instanceof BridgeError && error2.code === ERROR_CODES.bridge_unreachable) {
     return "Obsidian bridge is unreachable. Ask the user to open Obsidian and enable the Obsidian Bridge plugin.";
   }
+  if (error2 instanceof BridgeError && error2.code === ERROR_CODES.needs_confirmation) {
+    return `${error2.message}. To proceed, ask the user for approval, then retry upsert_note with confirmed=true.`;
+  }
   return error2 instanceof Error ? error2.message : String(error2);
 }
 

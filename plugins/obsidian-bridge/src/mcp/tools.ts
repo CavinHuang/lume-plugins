@@ -150,12 +150,15 @@ async function toolText(run: () => Promise<string>): Promise<{ content: Array<{ 
   }
 }
 
-function formatBridgeToolError(error: unknown): string {
+export function formatBridgeToolError(error: unknown): string {
   if (error instanceof BridgeError && error.code === ERROR_CODES.token_invalid) {
     return "Obsidian bridge is reachable but not paired. Ask the user for the pairing code shown in Obsidian, then call pair_with_code.";
   }
   if (error instanceof BridgeError && error.code === ERROR_CODES.bridge_unreachable) {
     return "Obsidian bridge is unreachable. Ask the user to open Obsidian and enable the Obsidian Bridge plugin.";
+  }
+  if (error instanceof BridgeError && error.code === ERROR_CODES.needs_confirmation) {
+    return `${error.message}. To proceed, ask the user for approval, then retry upsert_note with confirmed=true.`;
   }
   return error instanceof Error ? error.message : String(error);
 }
