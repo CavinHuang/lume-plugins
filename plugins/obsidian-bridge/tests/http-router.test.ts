@@ -242,6 +242,71 @@ test("GET /graph/neighbors 将 depth 钳制到 1..3 并规范化 direction", asy
   assert.deepEqual(calls[0], { depth: 3, direction: "both" });
 });
 
+test("GET /graph/structure 返回 hub/孤岛/桥", async () => {
+  const token = freshToken();
+  const r = createRouter({
+    ...base,
+    appVersion: "0",
+    vault: mockVault({
+      graphStructure() {
+        return {
+          hubs: ["b.md"],
+          orphans: ["l.md"],
+          bridges: [{ from: "c.md", to: "d.md" }],
+        };
+      },
+    } as Partial<VaultService>),
+  });
+  const res = await r({
+    method: "GET",
+    path: "/graph/structure",
+    headers: { authorization: `Bearer ${token}` },
+    body: "",
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual((res.body as any).hubs, ["b.md"]);
+  assert.deepEqual((res.body as any).bridges, [{ from: "c.md", to: "d.md" }]);
+});
+
+test("GET /graph/structure 将 top 钳制到 1..100(默认 10)", async () => {
+  const token = freshToken();
+  const calls: number[] = [];
+  const r = createRouter({
+    ...base,
+    appVersion: "0",
+    vault: mockVault({
+      graphStructure(top?: number) {
+        calls.push(top as number);
+        return { hubs: [], orphans: [], bridges: [] };
+      },
+    } as Partial<VaultService>),
+  });
+  // 缺省 → 10
+  await r({
+    method: "GET",
+    path: "/graph/structure",
+    headers: { authorization: `Bearer ${token}` },
+    body: "",
+  });
+  // top=9999 钳到 100
+  await r({
+    method: "GET",
+    path: "/graph/structure",
+    headers: { authorization: `Bearer ${token}` },
+    body: "",
+    query: { top: "9999" },
+  });
+  // top=-5 钳到 1
+  await r({
+    method: "GET",
+    path: "/graph/structure",
+    headers: { authorization: `Bearer ${token}` },
+    body: "",
+    query: { top: "-5" },
+  });
+  assert.deepEqual(calls, [10, 100, 1]);
+});
+
 interface ApiErr {
   error: { code: string; message: string };
 }

@@ -90,3 +90,51 @@ test("graphPath 链路:GET /graph/path 返回 path 与 hops", async () => {
 
   await new Promise<void>((r) => srv.close(() => r()));
 });
+
+test("graphStructure 链路:GET /graph/structure", async () => {
+  const calls: string[] = [];
+  const srv = http.createServer((req, res) => {
+    calls.push(`${req.method} ${req.url}`);
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        hubs: ["b.md"],
+        orphans: ["l.md"],
+        bridges: [{ from: "c.md", to: "d.md" }],
+      }),
+    );
+  });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  const port = (srv.address() as { port: number }).port;
+
+  const client = createObsidianClient({
+    baseUrl: `http://127.0.0.1:${port}`,
+    getToken: async () => "T",
+  });
+  const r = await client.graphStructure(5);
+  assert.deepEqual(r.hubs, ["b.md"]);
+  assert.deepEqual(r.bridges, [{ from: "c.md", to: "d.md" }]);
+  assert.match(calls[0], /GET \/graph\/structure\?top=5/);
+
+  await new Promise<void>((r) => srv.close(() => r()));
+});
+
+test("graphStructure 链路:无 top 时不带 query", async () => {
+  const calls: string[] = [];
+  const srv = http.createServer((req, res) => {
+    calls.push(`${req.method} ${req.url}`);
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ hubs: [], orphans: [], bridges: [] }));
+  });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  const port = (srv.address() as { port: number }).port;
+
+  const client = createObsidianClient({
+    baseUrl: `http://127.0.0.1:${port}`,
+    getToken: async () => "T",
+  });
+  await client.graphStructure();
+  assert.match(calls[0], /GET \/graph\/structure$/);
+
+  await new Promise<void>((r) => srv.close(() => r()));
+});

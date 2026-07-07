@@ -1,5 +1,5 @@
 import type { VaultService } from "./http-router.ts";
-import { neighbors, shortestPath, type Adjacency } from "./graph-engine.ts";
+import { neighbors, shortestPath, structure, type Adjacency } from "./graph-engine.ts";
 
 // 最小 Obsidian 类型(避免强耦合 obsidian 包;真实 app 满足结构即可)
 interface ObsidianApp {
@@ -176,6 +176,9 @@ export function createVaultService(app: ObsidianApp): VaultService {
     },
     graphPath(from, to) {
       return shortestPath(buildAdjacencies().both, from, to);
+    },
+    graphStructure(top) {
+      return structure(buildAdjacencies().both, top);
     },
   };
 }

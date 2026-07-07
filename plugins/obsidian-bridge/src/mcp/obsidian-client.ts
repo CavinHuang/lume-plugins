@@ -51,6 +51,11 @@ export interface ObsidianClient {
     direction: "fwd" | "back" | "both",
   ): Promise<{ path: string; depth: number; via: string }[]>;
   graphPath(from: string, to: string): Promise<{ path: string[]; hops: number }>;
+  graphStructure(top?: number): Promise<{
+    hubs: string[];
+    orphans: string[];
+    bridges: { from: string; to: string }[];
+  }>;
 }
 
 export interface ClientDeps {
@@ -150,5 +155,7 @@ export function createObsidianClient(deps: ClientDeps): ObsidianClient {
         })
       ).nodes,
     graphPath: async (from, to) => req("GET", "/graph/path", { query: { from, to } }),
+    graphStructure: (top) =>
+      req("GET", "/graph/structure", top ? { query: { top: String(top) } } : {}),
   };
 }

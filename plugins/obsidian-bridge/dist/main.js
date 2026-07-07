@@ -216,6 +216,11 @@ function createRouter(deps) {
       const path = await deps.vault.graphPath(q.from ?? "", q.to ?? "");
       return { status: 200, body: { path, hops: Math.max(0, path.length - 1) } };
     }
+    if (req.method === "GET" && req.path === "/graph/structure") {
+      const q = req.query ?? {};
+      const top = q.top ? Math.min(Math.max(Number(q.top) || 10, 1), 100) : 10;
+      return { status: 200, body: deps.vault.graphStructure(top) };
+    }
     if (req.method === "GET" && req.path === "/events") {
       return err(ERROR_CODES.not_found, "events stream not implemented in Phase 1", 501);
     }
@@ -323,6 +328,40 @@ function shortestPath(adj, from, to) {
     }
   }
   return [];
+}
+function structure(adj, top = 10) {
+  const hubs = [...adj.entries()].filter(([, ns]) => ns.size > 0).sort((a, b) => b[1].size - a[1].size).slice(0, top).map(([n]) => n);
+  const orphans = [...adj.entries()].filter(([, ns]) => ns.size === 0).map(([n]) => n);
+  const bridges = findBridges(adj);
+  return { hubs, orphans, bridges };
+}
+function findBridges(adj) {
+  const result = [];
+  const disc = /* @__PURE__ */ new Map();
+  const low = /* @__PURE__ */ new Map();
+  const visited = /* @__PURE__ */ new Set();
+  let time = 0;
+  function dfs(u, parent) {
+    visited.add(u);
+    disc.set(u, time);
+    low.set(u, time);
+    time++;
+    for (const v of adj.get(u) ?? /* @__PURE__ */ new Set()) {
+      if (!visited.has(v)) {
+        dfs(v, u);
+        low.set(u, Math.min(low.get(u), low.get(v)));
+        if (low.get(v) > disc.get(u)) {
+          result.push(u < v ? { from: u, to: v } : { from: v, to: u });
+        }
+      } else if (v !== parent) {
+        low.set(u, Math.min(low.get(u), disc.get(v)));
+      }
+    }
+  }
+  for (const node of adj.keys()) {
+    if (!visited.has(node)) dfs(node, null);
+  }
+  return result;
 }
 
 // src/obsidian-app/vault-service.ts
@@ -464,6 +503,9 @@ function createVaultService(app) {
     },
     graphPath(from, to) {
       return shortestPath(buildAdjacencies().both, from, to);
+    },
+    graphStructure(top) {
+      return structure(buildAdjacencies().both, top);
     }
   };
 }

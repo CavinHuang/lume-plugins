@@ -21196,7 +21196,8 @@ function createObsidianClient(deps) {
     graphNeighbors: async (path, depth, direction) => (await req("GET", "/graph/neighbors", {
       query: { path, depth: String(depth), direction }
     })).nodes,
-    graphPath: async (from, to) => req("GET", "/graph/path", { query: { from, to } })
+    graphPath: async (from, to) => req("GET", "/graph/path", { query: { from, to } }),
+    graphStructure: (top) => req("GET", "/graph/structure", top ? { query: { top: String(top) } } : {})
   };
 }
 
@@ -21372,6 +21373,15 @@ function registerTools(server2, client2, options = {}) {
     { from: zod_default.string(), to: zod_default.string() },
     async ({ from, to }) => toolText(async () => {
       const r = await client2.graphPath(from, to);
+      return JSON.stringify(r);
+    })
+  );
+  server2.tool(
+    "graph_structure",
+    "Vault graph structure: hub notes (most connections), orphans (no links), bridges (edges whose removal splits the graph).",
+    { top: zod_default.number().optional() },
+    async ({ top }) => toolText(async () => {
+      const r = await client2.graphStructure(top);
       return JSON.stringify(r);
     })
   );

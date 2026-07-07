@@ -166,6 +166,17 @@ export function registerTools(
         return JSON.stringify(r);
       }),
   );
+
+  server.tool(
+    "graph_structure",
+    "Vault graph structure: hub notes (most connections), orphans (no links), bridges (edges whose removal splits the graph).",
+    { top: z.number().optional() },
+    async ({ top }) =>
+      toolText(async () => {
+        const r = await client.graphStructure(top);
+        return JSON.stringify(r);
+      }),
+  );
 }
 
 async function toolText(run: () => Promise<string>): Promise<{ content: Array<{ type: "text"; text: string }> }> {

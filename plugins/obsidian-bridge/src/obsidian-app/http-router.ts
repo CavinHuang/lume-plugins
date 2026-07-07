@@ -7,7 +7,7 @@ import {
 import { classifyTrust, CONFIRMED_HEADER, isWrite } from "./trust-policy.ts";
 import { parseRoomCard } from "./palace.ts";
 import type { PairingStore } from "./pairing-store.ts";
-import type { Adjacency } from "./graph-engine.ts";
+import type { Adjacency, StructureReport } from "./graph-engine.ts";
 
 export interface VaultService {
   read(path: string): Promise<string>;
@@ -43,6 +43,9 @@ export interface VaultService {
     direction: "fwd" | "back" | "both",
   ): { path: string; depth: number; via: string }[];
   graphPath(from: string, to: string): string[];
+  // 结构分析(Task 9):hub(度数 top-N)、orphans(零度)、bridges(Tarjan 桥边)。
+  // 同步:与 graphNeighbors/graphPath 一致,基于内存邻接表。
+  graphStructure(top?: number): StructureReport;
 }
 
 export interface RouterRequest {
@@ -201,6 +204,12 @@ export function createRouter(deps: RouterDeps) {
       const q = req.query ?? {};
       const path = await deps.vault.graphPath(q.from ?? "", q.to ?? "");
       return { status: 200, body: { path, hops: Math.max(0, path.length - 1) } };
+    }
+    // /graph/structure(hub/孤岛/桥;top 钳制 1..100,默认 10)
+    if (req.method === "GET" && req.path === "/graph/structure") {
+      const q = req.query ?? {};
+      const top = q.top ? Math.min(Math.max(Number(q.top) || 10, 1), 100) : 10;
+      return { status: 200, body: deps.vault.graphStructure(top) };
     }
     // /events(SSE 占位:Phase 1 返回 501,Phase 2 实现推送)
     if (req.method === "GET" && req.path === "/events") {
