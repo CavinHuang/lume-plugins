@@ -268,7 +268,9 @@ function startServer(opts) {
 function createVaultService(app) {
   return {
     async read(path) {
-      return app.vault.read(app.vault.getAbstractFileByPath(path));
+      const f = app.vault.getAbstractFileByPath(path);
+      if (!f) throw new Error(`not found: ${path}`);
+      return app.vault.read(f);
     },
     async exists(path) {
       return app.vault.getAbstractFileByPath(path) !== null;

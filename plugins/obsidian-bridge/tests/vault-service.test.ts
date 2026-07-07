@@ -156,4 +156,12 @@ test("metadata 对不存在文件返回空且不抛", async () => {
   const m = await s.metadata("missing.md");
   assert.deepEqual(m.tags, []);
   assert.deepEqual(m.frontmatter, {});
+  assert.equal(m.mtime, 0);
+  assert.equal(m.ctime, 0);
+});
+
+test("read 不存在文件抛错而非裸 NPE", async () => {
+  const app = mockApp({});
+  const s = createVaultService(app);
+  await assert.rejects(() => s.read("missing.md"), /not found/);
 });
