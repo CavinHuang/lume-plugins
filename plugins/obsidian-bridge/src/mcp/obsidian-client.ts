@@ -24,7 +24,7 @@ export interface ObsidianClient {
   search(
     q: string,
     opts?: { type?: string; limit?: number },
-  ): Promise<{ path: string; snippet: string; score: number }[]>;
+  ): Promise<{ path: string; snippet: string; score: number; mtime: number }[]>;
   metadata(path: string): Promise<{
     tags: string[];
     frontmatter: Record<string, unknown>;

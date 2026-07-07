@@ -46,7 +46,11 @@ function mockApp(
       delete: async (f: { path: string }) => {
         store.delete(f.path);
       },
-      getMarkdownFiles: () => [...store.keys()].map((p) => ({ path: p })),
+      getMarkdownFiles: () =>
+        [...store.keys()].map((p) => ({
+          path: p,
+          stat: { mtime: store.get(p)!.mtime!, ctime: store.get(p)!.ctime },
+        })),
     },
     metadataCache: {
       getFileCache: (f: { path: string }) => ({
@@ -164,4 +168,22 @@ test("read 不存在文件抛错而非裸 NPE", async () => {
   const app = mockApp({});
   const s = createVaultService(app);
   await assert.rejects(() => s.read("missing.md"), /not found/);
+});
+
+test("search 返回 mtime", async () => {
+  const app = mockApp({ "x.md": { content: "hello", mtime: 4242 } });
+  const s = createVaultService(app);
+  const hits = await s.search("hello", {});
+  assert.equal(hits[0].mtime, 4242);
+});
+
+test("search type=tag 按标签过滤", async () => {
+  const app = mockApp({
+    "a.md": { content: "x", tags: ["proj/lume"] },
+    "b.md": { content: "x", tags: ["other"] },
+  });
+  const s = createVaultService(app);
+  const hits = await s.search("lume", { type: "tag" });
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].path, "a.md");
 });

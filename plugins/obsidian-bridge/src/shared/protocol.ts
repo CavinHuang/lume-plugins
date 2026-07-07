@@ -48,6 +48,7 @@ export interface SearchHit {
   path: string;
   snippet: string;
   score: number;
+  mtime: number;
 }
 
 export interface Backlink {

@@ -299,15 +299,25 @@ function createVaultService(app) {
       const ql = q.toLowerCase();
       const hits = [];
       for (const f of app.vault.getMarkdownFiles()) {
-        const content = await app.vault.read(f);
-        const idx = content.toLowerCase().indexOf(ql);
-        if (idx >= 0) {
-          const start = Math.max(0, idx - 30);
-          hits.push({
-            path: f.path,
-            snippet: content.slice(start, idx + ql.length + 30),
-            score: 1
-          });
+        const mtime = f.stat?.mtime ?? 0;
+        if (opts.type === "tag") {
+          const cache = app.metadataCache.getFileCache(f);
+          const tags = cache?.tags ? Object.keys(cache.tags).map((t) => t.replace(/^#/, "").toLowerCase()) : [];
+          if (tags.some((t) => t.includes(ql))) {
+            hits.push({ path: f.path, snippet: `#${q}`, score: 1, mtime });
+          }
+        } else {
+          const content = await app.vault.read(f);
+          const idx = content.toLowerCase().indexOf(ql);
+          if (idx >= 0) {
+            const start = Math.max(0, idx - 30);
+            hits.push({
+              path: f.path,
+              snippet: content.slice(start, idx + ql.length + 30),
+              score: 1,
+              mtime
+            });
+          }
         }
         if (hits.length >= limit) break;
       }
