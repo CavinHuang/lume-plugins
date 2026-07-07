@@ -7,7 +7,7 @@ import {
 import { classifyTrust, CONFIRMED_HEADER, isWrite } from "./trust-policy.ts";
 import { parseRoomCard } from "./palace.ts";
 import type { PairingStore } from "./pairing-store.ts";
-import type { Adjacency, StructureReport } from "./graph-engine.ts";
+import { type Adjacency, type StructureReport, type SimilarNode } from "./graph-engine.ts";
 
 export interface VaultService {
   read(path: string): Promise<string>;
@@ -46,6 +46,8 @@ export interface VaultService {
   // 结构分析(Task 9):hub(度数 top-N)、orphans(零度)、bridges(Tarjan 桥边)。
   // 同步:与 graphNeighbors/graphPath 一致,基于内存邻接表。
   graphStructure(top?: number): StructureReport;
+  // 共邻居 Jaccard 相似度(Task 11):同步,委托给 graph-engine.similar。
+  graphSimilar(path: string, limit?: number): SimilarNode[];
 }
 
 export interface RouterRequest {

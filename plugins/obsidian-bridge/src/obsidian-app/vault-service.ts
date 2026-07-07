@@ -1,5 +1,5 @@
 import type { VaultService } from "./http-router.ts";
-import { neighbors, shortestPath, structure, type Adjacency } from "./graph-engine.ts";
+import { neighbors, shortestPath, structure, similar, type Adjacency } from "./graph-engine.ts";
 
 // 最小 Obsidian 类型(避免强耦合 obsidian 包;真实 app 满足结构即可)
 interface ObsidianApp {
@@ -44,6 +44,21 @@ export function createVaultService(app: ObsidianApp): VaultService {
         back.get(tgt)!.add(src);
         both.get(src)!.add(tgt);
         both.get(tgt)!.add(src);
+      }
+    }
+    // 合并 frontmatter.links(类型化关系边):作者主动声明的有向边,
+    // 进入 fwd/both,但不进入 back(typed edge 有方向,反链语义由 back 专管 wiki-link 入边)。
+    for (const f of app.vault.getMarkdownFiles()) {
+      const cache = app.metadataCache.getFileCache(f);
+      const fl = (cache?.frontmatter?.links as Array<{ to?: string }> | undefined) ?? [];
+      for (const edge of fl) {
+        const to = edge?.to;
+        if (!to) continue; // 缺 to 视为 malformed,跳过
+        ensure(f.path);
+        ensure(to);
+        fwd.get(f.path)!.add(to);
+        both.get(f.path)!.add(to);
+        both.get(to)!.add(f.path);
       }
     }
     return { fwd, back, both };
@@ -179,6 +194,10 @@ export function createVaultService(app: ObsidianApp): VaultService {
     },
     graphStructure(top) {
       return structure(buildAdjacencies().both, top);
+    },
+    // 共邻居 Jaccard 相似度(Task 11):同步,委托给 graph-engine.similar。
+    graphSimilar(path, limit) {
+      return similar(buildAdjacencies().both, path, limit);
     },
   };
 }

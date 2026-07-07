@@ -219,3 +219,26 @@ test("graphPath 返回最短路径", async () => {
   const s = createVaultService(app);
   assert.deepEqual(s.graphPath("a.md", "c.md"), ["a.md", "b.md", "c.md"]);
 });
+
+test("buildAdjacencies 合并 frontmatter.links 类型化边", () => {
+  const app = mockApp(
+    {
+      "p.md": { content: "x", frontmatter: { links: [{ to: "people/z.md", type: "owner" }] } },
+      "people/z.md": { content: "z" },
+    },
+  );
+  const s = createVaultService(app);
+  const adj = s.buildAdjacencies();
+  assert.ok(adj.fwd.get("p.md")!.has("people/z.md")); // frontmatter.links 进入出边
+  assert.ok(adj.both.get("people/z.md")!.has("p.md")); // 双向
+});
+
+test("graphSimilar 按共邻居返回相似笔记", () => {
+  const app = mockApp(
+    { "x.md": { content: "[[s1]]" }, "y.md": { content: "[[s1]]" }, "s1.md": { content: "" } },
+    { resolvedLinks: { "x.md": { "s1.md": 1 }, "y.md": { "s1.md": 1 } } },
+  );
+  const s = createVaultService(app);
+  const sim = s.graphSimilar("x.md", 10);
+  assert.ok(sim.some((n) => n.path === "y.md"));
+});

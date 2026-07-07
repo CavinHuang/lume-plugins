@@ -363,6 +363,20 @@ function findBridges(adj) {
   }
   return result;
 }
+function similar(adj, start, limit = 10) {
+  if (!adj.has(start)) return [];
+  const startN = adj.get(start) ?? /* @__PURE__ */ new Set();
+  const out = [];
+  for (const [node, neighbors2] of adj) {
+    if (node === start) continue;
+    let inter = 0;
+    for (const n of startN) if (neighbors2.has(n)) inter++;
+    const union = startN.size + neighbors2.size - inter;
+    const score = union === 0 ? 0 : inter / union;
+    if (score > 0) out.push({ path: node, score });
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, limit);
+}
 
 // src/obsidian-app/vault-service.ts
 function createVaultService(app) {
@@ -386,6 +400,19 @@ function createVaultService(app) {
         back.get(tgt).add(src);
         both.get(src).add(tgt);
         both.get(tgt).add(src);
+      }
+    }
+    for (const f of app.vault.getMarkdownFiles()) {
+      const cache = app.metadataCache.getFileCache(f);
+      const fl = cache?.frontmatter?.links ?? [];
+      for (const edge of fl) {
+        const to = edge?.to;
+        if (!to) continue;
+        ensure(f.path);
+        ensure(to);
+        fwd.get(f.path).add(to);
+        both.get(f.path).add(to);
+        both.get(to).add(f.path);
       }
     }
     return { fwd, back, both };
@@ -506,6 +533,10 @@ function createVaultService(app) {
     },
     graphStructure(top) {
       return structure(buildAdjacencies().both, top);
+    },
+    // 共邻居 Jaccard 相似度(Task 11):同步,委托给 graph-engine.similar。
+    graphSimilar(path, limit) {
+      return similar(buildAdjacencies().both, path, limit);
     }
   };
 }
