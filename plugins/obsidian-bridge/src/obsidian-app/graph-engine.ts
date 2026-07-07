@@ -58,3 +58,57 @@ export function shortestPath(adj: Adjacency, from: string, to: string): string[]
   }
   return [];
 }
+
+export interface StructureReport {
+  hubs: string[];
+  orphans: string[];
+  bridges: { from: string; to: string }[];
+}
+
+// 结构分析:hub(度数 top-N 降序)、orphans(零度节点)、bridges(Tarjan 桥边)。
+export function structure(adj: Adjacency, top = 10): StructureReport {
+  // hub: 度数 top-N(降序)
+  const hubs = [...adj.entries()]
+    .filter(([, ns]) => ns.size > 0)
+    .sort((a, b) => b[1].size - a[1].size)
+    .slice(0, top)
+    .map(([n]) => n);
+  // orphans: 零度
+  const orphans = [...adj.entries()].filter(([, ns]) => ns.size === 0).map(([n]) => n);
+  // bridges: Tarjan 桥边算法(递归)
+  const bridges = findBridges(adj);
+  return { hubs, orphans, bridges };
+}
+
+// Tarjan 桥边:无向图中删除后使连通分量数增加的边。
+// 桥条件:树边 (u,v) 满足 low[v] > disc[u](v 子树无法绕过 u-v 回到 u 或更早)。
+function findBridges(adj: Adjacency): { from: string; to: string }[] {
+  const result: { from: string; to: string }[] = [];
+  const disc = new Map<string, number>();
+  const low = new Map<string, number>();
+  const visited = new Set<string>();
+  let time = 0;
+
+  function dfs(u: string, parent: string | null) {
+    visited.add(u);
+    disc.set(u, time);
+    low.set(u, time);
+    time++;
+    for (const v of adj.get(u) ?? new Set<string>()) {
+      if (!visited.has(v)) {
+        dfs(v, u);
+        low.set(u, Math.min(low.get(u)!, low.get(v)!));
+        if (low.get(v)! > disc.get(u)!) {
+          result.push(u < v ? { from: u, to: v } : { from: v, to: u });
+        }
+      } else if (v !== parent) {
+        low.set(u, Math.min(low.get(u)!, disc.get(v)!));
+      }
+    }
+  }
+
+  for (const node of adj.keys()) {
+    if (!visited.has(node)) dfs(node, null);
+  }
+  return result;
+}

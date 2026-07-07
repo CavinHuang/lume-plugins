@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { neighbors, shortestPath, type Adjacency } from "../src/obsidian-app/graph-engine.ts";
+import { neighbors, shortestPath, structure, type Adjacency } from "../src/obsidian-app/graph-engine.ts";
 
 // 图: a-b-c-d(链), b-e(分支)
 function chainGraph(): Adjacency {
@@ -45,4 +45,32 @@ test("shortestPath 不可达返回空数组", () => {
 
 test("shortestPath 节点不存在返回空", () => {
   assert.deepEqual(shortestPath(chainGraph(), "a", "ghost"), []);
+});
+
+test("structure 识别 hub / orphans / bridges", () => {
+  // a-b, b-c, c-d, 孤立 lonely;桥为 c-d(删后 d 断开)
+  const g: Adjacency = new Map();
+  const add = (x: string, y: string) => {
+    if (!g.has(x)) g.set(x, new Set());
+    if (!g.has(y)) g.set(y, new Set());
+    g.get(x)!.add(y); g.get(y)!.add(x);
+  };
+  add("a", "b"); add("b", "c"); add("c", "d");
+  g.set("lonely", new Set());
+  const rep = structure(g, 10);
+  // b、c 度数最高(各 2),排在前
+  assert.ok(rep.hubs.includes("b"));
+  assert.ok(rep.hubs.includes("c"));
+  assert.ok(rep.orphans.includes("lonely"));
+  // c-d 是桥
+  assert.ok(rep.bridges.some((br) => (br.from === "c" && br.to === "d") || (br.from === "d" && br.to === "c")));
+});
+
+test("structure top 限制 hub 数量", () => {
+  const g: Adjacency = new Map();
+  const add = (x: string, y: string) => { if (!g.has(x)) g.set(x, new Set()); if (!g.has(y)) g.set(y, new Set()); g.get(x)!.add(y); g.get(y)!.add(x); };
+  add("hub", "x1"); add("hub", "x2"); add("hub", "x3");
+  const rep = structure(g, 1);
+  assert.equal(rep.hubs.length, 1);
+  assert.equal(rep.hubs[0], "hub");
 });
