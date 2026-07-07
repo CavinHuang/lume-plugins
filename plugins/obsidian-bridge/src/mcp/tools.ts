@@ -4,6 +4,66 @@ import { ERROR_CODES } from "../shared/protocol.ts";
 import { BridgeError, type ObsidianClient } from "./obsidian-client.ts";
 import { createFileTokenStore, type TokenStore } from "./token-store.ts";
 
+// 在 from 笔记正文里合并一条 frontmatter.links 边。极简健壮实现:
+// - 有 frontmatter 则在 links 数组追加(按 to 去重,已存在同 to 的边则覆盖 type);
+// - 无 frontmatter 则前插一个。
+// 导出供工具与测试复用。
+export function mergeFrontmatterLink(body: string, edge: { to: string; type: string }): string {
+  const fmMatch = body.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (!fmMatch) {
+    return `---\nlinks:\n  - to: ${edge.to}\n    type: ${edge.type}\n---\n${body}`;
+  }
+  const fm = fmMatch[1];
+  // 已有 links: 则解析-合并-序列化,避免文本注入破坏缩进/重复 to。
+  if (/^links:/m.test(fm)) {
+    const updated = fm.replace(
+      /^(links:\n(?:[ \t]+.*\n?)+)/m,
+      (block: string) => mergeLinksBlock(block, edge),
+    );
+    return body.replace(fmMatch[0], `---\n${updated}\n---\n`);
+  }
+  // 无 links: 在 frontmatter 顶部新增
+  const newFm = `links:\n  - to: ${edge.to}\n    type: ${edge.type}\n` + fm;
+  return body.replace(fmMatch[0], `---\n${newFm}\n---\n`);
+}
+
+// 解析 links: 块,合并 edge(by to 去重),再序列化回 YAML 文本。
+function mergeLinksBlock(block: string, edge: { to: string; type: string }): string {
+  const lines = block.split("\n");
+  const entries: { to: string; type: string }[] = [];
+  let header = "links:";
+  let trailing = "";
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i]!;
+    if (ln === "links:") {
+      header = ln;
+      continue;
+    }
+    const m = ln.match(/^[ \t]+-+\s*to:\s*(\S.*)$/);
+    if (m) {
+      const to = m[1]!.trim();
+      // 找紧随的 type 行
+      const next = lines[i + 1] ?? "";
+      const tm = next.match(/^[ \t]+type:\s*(\S.*)$/);
+      entries.push({ to, type: tm ? tm[1]!.trim() : "" });
+      if (tm) i++;
+    } else if (ln !== "" && !/^[ \t]+-/.test(ln) && !/^[ \t]+(to|type):/.test(ln)) {
+      // 非_links 数组项的尾随内容(其它 frontmatter 字段)——保留
+      trailing += (trailing ? "\n" : "") + ln;
+    }
+  }
+  // 合并:同 to 覆盖 type,否则追加
+  const idx = entries.findIndex((e) => e.to === edge.to);
+  if (idx >= 0) entries[idx]!.type = edge.type;
+  else entries.push({ to: edge.to, type: edge.type });
+  let out = header;
+  for (const e of entries) {
+    out += `\n  - to: ${e.to}\n    type: ${e.type}`;
+  }
+  if (trailing) out += "\n" + trailing;
+  return out + "\n";
+}
+
 export function registerTools(
   server: McpServer,
   client: ObsidianClient,
@@ -175,6 +235,44 @@ export function registerTools(
       toolText(async () => {
         const r = await client.graphStructure(top);
         return JSON.stringify(r);
+      }),
+  );
+
+  server.tool(
+    "graph_similar",
+    "Find notes similar to a given one by shared neighbors (Jaccard over the wiki-link graph). Returns [{path, score}].",
+    { path: z.string(), limit: z.number().optional() },
+    async ({ path, limit }) =>
+      toolText(async () => JSON.stringify(await client.graphSimilar(path, limit))),
+  );
+
+  server.tool(
+    "link_notes",
+    "Create a link from one note to another. If type is omitted, appends a [[to]] wiki link to the body; if type is given, records a typed edge in the from-note's frontmatter links:[{to,type}]. Writing to protected zones (people/, projects/, wiki/, ...) requires confirmed=true.",
+    {
+      from: z.string(),
+      to: z.string(),
+      type: z.string().optional(),
+      confirmed: z.boolean().optional(),
+    },
+    async ({ from, to, type, confirmed }) =>
+      toolText(async () => {
+        if (type) {
+          // 类型化:读 from → 合并 frontmatter.links → upsert(带 confirmed)
+          const r = await client.readNote(from);
+          const updated = mergeFrontmatterLink(r.content, { to, type });
+          await client.upsertNote(from, updated, { confirmed });
+          return `typed link: ${from} -[${type}]-> ${to}`;
+        }
+        // 无类型:append wiki link
+        const r = await client.readNote(from);
+        const sep = r.content.endsWith("\n") ? "" : "\n";
+        await client.upsertNote(
+          from,
+          `${r.content}${sep}\n[[${to.replace(/\.md$/, "")}]]\n`,
+          { confirmed },
+        );
+        return `wiki link: ${from} -> ${to}`;
       }),
   );
 }

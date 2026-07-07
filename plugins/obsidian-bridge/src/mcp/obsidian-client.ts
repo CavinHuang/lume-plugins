@@ -56,6 +56,7 @@ export interface ObsidianClient {
     orphans: string[];
     bridges: { from: string; to: string }[];
   }>;
+  graphSimilar(path: string, limit?: number): Promise<{ path: string; score: number }[]>;
 }
 
 export interface ClientDeps {
@@ -157,5 +158,11 @@ export function createObsidianClient(deps: ClientDeps): ObsidianClient {
     graphPath: async (from, to) => req("GET", "/graph/path", { query: { from, to } }),
     graphStructure: (top) =>
       req("GET", "/graph/structure", top ? { query: { top: String(top) } } : {}),
+    graphSimilar: async (path, limit) =>
+      (
+        await req("GET", "/graph/similar", {
+          query: { path, ...(limit ? { limit: String(limit) } : {}) },
+        })
+      ).similar,
   };
 }

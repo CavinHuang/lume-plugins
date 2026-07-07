@@ -307,6 +307,72 @@ test("GET /graph/structure 将 top 钳制到 1..100(默认 10)", async () => {
   assert.deepEqual(calls, [10, 100, 1]);
 });
 
+test("GET /graph/similar 返回相似笔记", async () => {
+  const token = freshToken();
+  const r = createRouter({
+    ...base,
+    appVersion: "0",
+    vault: mockVault({
+      // VaultService.graphSimilar 是同步的(Task 11);mock 不能用 async
+      graphSimilar() {
+        return [{ path: "y.md", score: 0.5 }];
+      },
+    } as Partial<VaultService>),
+  });
+  const res = await r({
+    method: "GET",
+    path: "/graph/similar",
+    headers: { authorization: `Bearer ${token}` },
+    body: "",
+    query: { path: "x.md", limit: "5" },
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual(
+    (res.body as { similar: { path: string; score: number }[] }).similar[0].path,
+    "y.md",
+  );
+});
+
+test("GET /graph/similar 将 limit 钳制到 1..50(默认 10)", async () => {
+  const token = freshToken();
+  const calls: number[] = [];
+  const r = createRouter({
+    ...base,
+    appVersion: "0",
+    vault: mockVault({
+      graphSimilar(_p, limit?) {
+        calls.push(limit as number);
+        return [];
+      },
+    } as Partial<VaultService>),
+  });
+  // 缺省 → 10
+  await r({
+    method: "GET",
+    path: "/graph/similar",
+    headers: { authorization: `Bearer ${token}` },
+    body: "",
+    query: { path: "x.md" },
+  });
+  // limit=9999 钳到 50
+  await r({
+    method: "GET",
+    path: "/graph/similar",
+    headers: { authorization: `Bearer ${token}` },
+    body: "",
+    query: { path: "x.md", limit: "9999" },
+  });
+  // limit=0 钳到 1
+  await r({
+    method: "GET",
+    path: "/graph/similar",
+    headers: { authorization: `Bearer ${token}` },
+    body: "",
+    query: { path: "x.md", limit: "0" },
+  });
+  assert.deepEqual(calls, [10, 50, 1]);
+});
+
 interface ApiErr {
   error: { code: string; message: string };
 }

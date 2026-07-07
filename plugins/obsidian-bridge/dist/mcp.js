@@ -21197,7 +21197,10 @@ function createObsidianClient(deps) {
       query: { path, depth: String(depth), direction }
     })).nodes,
     graphPath: async (from, to) => req("GET", "/graph/path", { query: { from, to } }),
-    graphStructure: (top) => req("GET", "/graph/structure", top ? { query: { top: String(top) } } : {})
+    graphStructure: (top) => req("GET", "/graph/structure", top ? { query: { top: String(top) } } : {}),
+    graphSimilar: async (path, limit) => (await req("GET", "/graph/similar", {
+      query: { path, ...limit ? { limit: String(limit) } : {} }
+    })).similar
   };
 }
 
@@ -21234,6 +21237,70 @@ function createFileTokenStore(path = resolveDefaultTokenStorePath()) {
 }
 
 // src/mcp/tools.ts
+function mergeFrontmatterLink(body, edge) {
+  const fmMatch = body.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (!fmMatch) {
+    return `---
+links:
+  - to: ${edge.to}
+    type: ${edge.type}
+---
+${body}`;
+  }
+  const fm = fmMatch[1];
+  if (/^links:/m.test(fm)) {
+    const updated = fm.replace(
+      /^(links:\n(?:[ \t]+.*\n?)+)/m,
+      (block) => mergeLinksBlock(block, edge)
+    );
+    return body.replace(fmMatch[0], `---
+${updated}
+---
+`);
+  }
+  const newFm = `links:
+  - to: ${edge.to}
+    type: ${edge.type}
+` + fm;
+  return body.replace(fmMatch[0], `---
+${newFm}
+---
+`);
+}
+function mergeLinksBlock(block, edge) {
+  const lines = block.split("\n");
+  const entries = [];
+  let header = "links:";
+  let trailing = "";
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i];
+    if (ln === "links:") {
+      header = ln;
+      continue;
+    }
+    const m = ln.match(/^[ \t]+-+\s*to:\s*(\S.*)$/);
+    if (m) {
+      const to = m[1].trim();
+      const next = lines[i + 1] ?? "";
+      const tm = next.match(/^[ \t]+type:\s*(\S.*)$/);
+      entries.push({ to, type: tm ? tm[1].trim() : "" });
+      if (tm) i++;
+    } else if (ln !== "" && !/^[ \t]+-/.test(ln) && !/^[ \t]+(to|type):/.test(ln)) {
+      trailing += (trailing ? "\n" : "") + ln;
+    }
+  }
+  const idx = entries.findIndex((e) => e.to === edge.to);
+  if (idx >= 0) entries[idx].type = edge.type;
+  else entries.push({ to: edge.to, type: edge.type });
+  let out = header;
+  for (const e of entries) {
+    out += `
+  - to: ${e.to}
+    type: ${e.type}`;
+  }
+  if (trailing) out += "\n" + trailing;
+  return out + "\n";
+}
 function registerTools(server2, client2, options = {}) {
   const tokenStore2 = options.tokenStore ?? createFileTokenStore();
   server2.tool(
@@ -21383,6 +21450,40 @@ function registerTools(server2, client2, options = {}) {
     async ({ top }) => toolText(async () => {
       const r = await client2.graphStructure(top);
       return JSON.stringify(r);
+    })
+  );
+  server2.tool(
+    "graph_similar",
+    "Find notes similar to a given one by shared neighbors (Jaccard over the wiki-link graph). Returns [{path, score}].",
+    { path: zod_default.string(), limit: zod_default.number().optional() },
+    async ({ path, limit }) => toolText(async () => JSON.stringify(await client2.graphSimilar(path, limit)))
+  );
+  server2.tool(
+    "link_notes",
+    "Create a link from one note to another. If type is omitted, appends a [[to]] wiki link to the body; if type is given, records a typed edge in the from-note's frontmatter links:[{to,type}]. Writing to protected zones (people/, projects/, wiki/, ...) requires confirmed=true.",
+    {
+      from: zod_default.string(),
+      to: zod_default.string(),
+      type: zod_default.string().optional(),
+      confirmed: zod_default.boolean().optional()
+    },
+    async ({ from, to, type, confirmed }) => toolText(async () => {
+      if (type) {
+        const r2 = await client2.readNote(from);
+        const updated = mergeFrontmatterLink(r2.content, { to, type });
+        await client2.upsertNote(from, updated, { confirmed });
+        return `typed link: ${from} -[${type}]-> ${to}`;
+      }
+      const r = await client2.readNote(from);
+      const sep = r.content.endsWith("\n") ? "" : "\n";
+      await client2.upsertNote(
+        from,
+        `${r.content}${sep}
+[[${to.replace(/\.md$/, "")}]]
+`,
+        { confirmed }
+      );
+      return `wiki link: ${from} -> ${to}`;
     })
   );
 }

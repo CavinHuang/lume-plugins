@@ -213,6 +213,14 @@ export function createRouter(deps: RouterDeps) {
       const top = q.top ? Math.min(Math.max(Number(q.top) || 10, 1), 100) : 10;
       return { status: 200, body: deps.vault.graphStructure(top) };
     }
+    // /graph/similar(共邻居 Jaccard;limit 钳制 1..50,默认 10;非数字回退 10)
+    if (req.method === "GET" && req.path === "/graph/similar") {
+      const q = req.query ?? {};
+      const rawLimit = q.limit !== undefined ? Number(q.limit) : 10;
+      const limit = Math.min(Math.max(Number.isNaN(rawLimit) ? 10 : rawLimit, 1), 50);
+      const similarNodes = deps.vault.graphSimilar(q.path ?? "", limit);
+      return { status: 200, body: { similar: similarNodes } };
+    }
     // /events(SSE 占位:Phase 1 返回 501,Phase 2 实现推送)
     if (req.method === "GET" && req.path === "/events") {
       return err(ERROR_CODES.not_found, "events stream not implemented in Phase 1", 501);

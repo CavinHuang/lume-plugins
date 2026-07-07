@@ -138,3 +138,44 @@ test("graphStructure 链路:无 top 时不带 query", async () => {
 
   await new Promise<void>((r) => srv.close(() => r()));
 });
+
+test("graphSimilar 链路:GET /graph/similar 解包 similar 数组", async () => {
+  const calls: string[] = [];
+  const srv = http.createServer((req, res) => {
+    calls.push(`${req.method} ${req.url}`);
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ similar: [{ path: "y.md", score: 0.5 }] }));
+  });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  const port = (srv.address() as { port: number }).port;
+
+  const client = createObsidianClient({
+    baseUrl: `http://127.0.0.1:${port}`,
+    getToken: async () => "T",
+  });
+  const r = await client.graphSimilar("x.md", 5);
+  assert.deepEqual(r, [{ path: "y.md", score: 0.5 }]);
+  assert.match(calls[0], /GET \/graph\/similar\?path=x\.md&limit=5/);
+
+  await new Promise<void>((r) => srv.close(() => r()));
+});
+
+test("graphSimilar 链路:无 limit 时不带 limit query", async () => {
+  const calls: string[] = [];
+  const srv = http.createServer((req, res) => {
+    calls.push(`${req.method} ${req.url}`);
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ similar: [] }));
+  });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  const port = (srv.address() as { port: number }).port;
+
+  const client = createObsidianClient({
+    baseUrl: `http://127.0.0.1:${port}`,
+    getToken: async () => "T",
+  });
+  await client.graphSimilar("x.md");
+  assert.match(calls[0], /GET \/graph\/similar\?path=x\.md$/);
+
+  await new Promise<void>((r) => srv.close(() => r()));
+});

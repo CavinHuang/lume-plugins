@@ -221,6 +221,13 @@ function createRouter(deps) {
       const top = q.top ? Math.min(Math.max(Number(q.top) || 10, 1), 100) : 10;
       return { status: 200, body: deps.vault.graphStructure(top) };
     }
+    if (req.method === "GET" && req.path === "/graph/similar") {
+      const q = req.query ?? {};
+      const rawLimit = q.limit !== void 0 ? Number(q.limit) : 10;
+      const limit = Math.min(Math.max(Number.isNaN(rawLimit) ? 10 : rawLimit, 1), 50);
+      const similarNodes = deps.vault.graphSimilar(q.path ?? "", limit);
+      return { status: 200, body: { similar: similarNodes } };
+    }
     if (req.method === "GET" && req.path === "/events") {
       return err(ERROR_CODES.not_found, "events stream not implemented in Phase 1", 501);
     }
