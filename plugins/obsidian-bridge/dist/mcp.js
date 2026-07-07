@@ -21269,36 +21269,68 @@ ${newFm}
 }
 function mergeLinksBlock(block, edge) {
   const lines = block.split("\n");
-  const entries = [];
-  let header = "links:";
-  let trailing = "";
-  for (let i = 0; i < lines.length; i++) {
+  const headerLine = lines[0] ?? "links:";
+  const items = [];
+  const trailing = [];
+  let currentItem = null;
+  for (let i = 1; i < lines.length; i++) {
     const ln = lines[i];
-    if (ln === "links:") {
-      header = ln;
-      continue;
+    if (ln === "" || !/^[ \t]/.test(ln)) {
+      if (currentItem) {
+        items.push(currentItem);
+        currentItem = null;
+      }
+      for (; i < lines.length; i++) trailing.push(lines[i]);
+      break;
     }
-    const m = ln.match(/^[ \t]+-+\s*to:\s*(\S.*)$/);
-    if (m) {
-      const to = m[1].trim();
-      const next = lines[i + 1] ?? "";
-      const tm = next.match(/^[ \t]+type:\s*(\S.*)$/);
-      entries.push({ to, type: tm ? tm[1].trim() : "" });
-      if (tm) i++;
-    } else if (ln !== "" && !/^[ \t]+-/.test(ln) && !/^[ \t]+(to|type):/.test(ln)) {
-      trailing += (trailing ? "\n" : "") + ln;
+    if (/^[ \t]+-/.test(ln)) {
+      if (currentItem) items.push(currentItem);
+      currentItem = [ln];
+    } else if (currentItem) {
+      currentItem.push(ln);
+    } else {
+      trailing.push(ln);
     }
   }
+  if (currentItem) items.push(currentItem);
+  const isStrict = (item) => {
+    if (item.length === 0 || item.length > 2) return false;
+    if (!/^[ \t]+-+\s*to:\s*\S/.test(item[0])) return false;
+    if (item.length === 2) return /^[ \t]+type:\s*\S/.test(item[1]);
+    return true;
+  };
+  const allStrict = items.every(isStrict);
+  if (!allStrict) {
+    let out2 = headerLine;
+    for (const item of items) {
+      for (const ln of item) out2 += "\n" + ln;
+    }
+    out2 += `
+  - to: ${edge.to}
+    type: ${edge.type}`;
+    if (trailing.length > 0) out2 += "\n" + trailing.join("\n");
+    return out2 + "\n";
+  }
+  const entries = items.map((item) => {
+    const m = item[0].match(/^[ \t]+-+\s*to:\s*(\S.*)$/);
+    const to = m[1].trim();
+    let type = "";
+    if (item.length === 2) {
+      const tm = item[1].match(/^[ \t]+type:\s*(\S.*)$/);
+      if (tm) type = tm[1].trim();
+    }
+    return { to, type };
+  });
   const idx = entries.findIndex((e) => e.to === edge.to);
   if (idx >= 0) entries[idx].type = edge.type;
   else entries.push({ to: edge.to, type: edge.type });
-  let out = header;
+  let out = headerLine;
   for (const e of entries) {
     out += `
   - to: ${e.to}
     type: ${e.type}`;
   }
-  if (trailing) out += "\n" + trailing;
+  if (trailing.length > 0) out += "\n" + trailing.join("\n");
   return out + "\n";
 }
 function registerTools(server2, client2, options = {}) {

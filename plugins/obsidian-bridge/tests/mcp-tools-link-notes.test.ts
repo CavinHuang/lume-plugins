@@ -155,3 +155,32 @@ test("mergeFrontmatterLink:同 to 已存在则覆盖 type(不重复)", () => {
   assert.match(out, /type: new/);
   assert.doesNotMatch(out, /type: old/);
 });
+
+// ===== mergeFrontmatterLink 保守 fallback(防数据损毁)=====
+
+test("mergeFrontmatterLink:links 块含非 schema 项(weight 字段)时保守 fallback,weight 不被错位", () => {
+  // 既有 links 块来自其它工具,带 weight 字段(非我们写入的 {to,type} schema)。
+  const body =
+    "---\nlinks:\n  - to: a.md\n    type: ref\n    weight: 5\ntitle: A\n---\n# A\n";
+  const out = mergeFrontmatterLink(body, { to: "b.md", type: "see" });
+  // weight: 5 必须保留,且仍紧贴在 a.md 条目下(不得被错位到新边下)
+  assert.match(out, /to: a\.md\n\s+type: ref\n\s+weight: 5/);
+  // 新边被追加
+  assert.match(out, /to: b\.md/);
+  assert.match(out, /type: see/);
+  // 原 frontmatter 其它字段保留
+  assert.match(out, /title: A/);
+  // 正文保留
+  assert.match(out, /# A/);
+});
+
+test("mergeFrontmatterLink:links 块含 from:-prefixed 项时保守 fallback,既有项不丢", () => {
+  // 非 to: 开头的列表项(Juggl 风格的 from/to)不应被丢弃。
+  const body = "---\nlinks:\n  - from: x.md\n    to: y.md\n---\n# A\n";
+  const out = mergeFrontmatterLink(body, { to: "z.md", type: "ref" });
+  assert.match(out, /from: x\.md/);
+  assert.match(out, /to: y\.md/);
+  // 新边被追加(不去重,因 fallback 跳过 dedup)
+  assert.match(out, /to: z\.md/);
+  assert.match(out, /type: ref/);
+});

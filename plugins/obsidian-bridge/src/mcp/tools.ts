@@ -4,10 +4,17 @@ import { ERROR_CODES } from "../shared/protocol.ts";
 import { BridgeError, type ObsidianClient } from "./obsidian-client.ts";
 import { createFileTokenStore, type TokenStore } from "./token-store.ts";
 
-// 在 from 笔记正文里合并一条 frontmatter.links 边。极简健壮实现:
-// - 有 frontmatter 则在 links 数组追加(按 to 去重,已存在同 to 的边则覆盖 type);
-// - 无 frontmatter 则前插一个。
-// 导出供工具与测试复用。
+/**
+ * 在 from 笔记正文里合并一条 frontmatter.links 边。
+ *
+ * 假设 schema:`links: [{ to: <path>, type: <string> }, ...]`。
+ * - 无 frontmatter 则前插一个;有 frontmatter 但无 `links:` 则在 fm 顶部新增。
+ * - 有 `links:` 块时,委托给 {@link mergeLinksBlock} 合并——该函数对未知 schema 采取
+ *   **保守 fallback**(逐字保留既有内容,只在末尾追加新边),避免损毁 user vault 里
+ *   由其它工具(Dataview/Juggl 等)写入的 links 块。
+ *
+ * 导出供工具与测试复用。
+ */
 export function mergeFrontmatterLink(body: string, edge: { to: string; type: string }): string {
   const fmMatch = body.match(/^---\n([\s\S]*?)\n---\n?/);
   if (!fmMatch) {
@@ -27,40 +34,88 @@ export function mergeFrontmatterLink(body: string, edge: { to: string; type: str
   return body.replace(fmMatch[0], `---\n${newFm}\n---\n`);
 }
 
-// 解析 links: 块,合并 edge(by to 去重),再序列化回 YAML 文本。
+/**
+ * 解析 frontmatter `links:` 块,合并一条 `{to, type}` 边,序列化回 YAML 文本。
+ *
+ * 假设 schema:`links: [{ to: <path>, type: <string> }, ...]`——每个列表项只含 `to` 与
+ * 可选的 `type` 两个字段。
+ *
+ * Conservative fallback:若检测到既有块里存在任何不符合该 schema 的内容(例如带
+ * `weight`/`from`/`note` 等额外字段的多字段项,或首字段不是 `to:` 的列表项),则
+ * **绝不**修改或丢弃既有行——逐字保留原块,只在末尾追加新的 `{to, type}` 项。这防止
+ * user vault 里由其它工具(Dataview/Juggl 等)写入的 links 块被静默损毁;此 fallback
+ * 路径下 dedup-by-`to` 被跳过(安全 > 去重)。
+ *
+ * Happy path(所有项都是干净的 `{to, type}` 对):按 `to` 去重——同 `to` 覆盖 `type`,
+ * 否则追加。
+ */
 function mergeLinksBlock(block: string, edge: { to: string; type: string }): string {
   const lines = block.split("\n");
-  const entries: { to: string; type: string }[] = [];
-  let header = "links:";
-  let trailing = "";
-  for (let i = 0; i < lines.length; i++) {
+  const headerLine = lines[0] ?? "links:";
+  const items: string[][] = [];
+  const trailing: string[] = [];
+  let currentItem: string[] | null = null;
+
+  // 逐行切分:header / 列表项(以 `^[ \t]+-` 开头)/ 项内续行 / 块尾随内容。
+  for (let i = 1; i < lines.length; i++) {
     const ln = lines[i]!;
-    if (ln === "links:") {
-      header = ln;
-      continue;
+    if (ln === "" || !/^[ \t]/.test(ln)) {
+      // 空行或非缩进行:items 区结束,余下全部作为 trailing 保留(绝不丢)。
+      if (currentItem) { items.push(currentItem); currentItem = null; }
+      for (; i < lines.length; i++) trailing.push(lines[i]!);
+      break;
     }
-    const m = ln.match(/^[ \t]+-+\s*to:\s*(\S.*)$/);
-    if (m) {
-      const to = m[1]!.trim();
-      // 找紧随的 type 行
-      const next = lines[i + 1] ?? "";
-      const tm = next.match(/^[ \t]+type:\s*(\S.*)$/);
-      entries.push({ to, type: tm ? tm[1]!.trim() : "" });
-      if (tm) i++;
-    } else if (ln !== "" && !/^[ \t]+-/.test(ln) && !/^[ \t]+(to|type):/.test(ln)) {
-      // 非_links 数组项的尾随内容(其它 frontmatter 字段)——保留
-      trailing += (trailing ? "\n" : "") + ln;
+    if (/^[ \t]+-/.test(ln)) {
+      if (currentItem) items.push(currentItem);
+      currentItem = [ln];
+    } else if (currentItem) {
+      currentItem.push(ln);
+    } else {
+      trailing.push(ln);
     }
   }
-  // 合并:同 to 覆盖 type,否则追加
+  if (currentItem) items.push(currentItem);
+
+  // 严格 schema:每个 item 必须恰好是 `  - to: <val>` 可选后跟一行 `    type: <val>`。
+  const isStrict = (item: string[]): boolean => {
+    if (item.length === 0 || item.length > 2) return false;
+    if (!/^[ \t]+-+\s*to:\s*\S/.test(item[0]!)) return false;
+    if (item.length === 2) return /^[ \t]+type:\s*\S/.test(item[1]!);
+    return true;
+  };
+  const allStrict = items.every(isStrict);
+
+  if (!allStrict) {
+    // 保守 fallback:既有 items/trailing 逐字保留,末尾追加新边,绝不丢一行。
+    let out = headerLine;
+    for (const item of items) {
+      for (const ln of item) out += "\n" + ln;
+    }
+    out += `\n  - to: ${edge.to}\n    type: ${edge.type}`;
+    if (trailing.length > 0) out += "\n" + trailing.join("\n");
+    return out + "\n";
+  }
+
+  // Happy path:解析为 entries,按 to 去重合并。
+  const entries: { to: string; type: string }[] = items.map((item) => {
+    const m = item[0]!.match(/^[ \t]+-+\s*to:\s*(\S.*)$/)!;
+    const to = m[1]!.trim();
+    let type = "";
+    if (item.length === 2) {
+      const tm = item[1]!.match(/^[ \t]+type:\s*(\S.*)$/);
+      if (tm) type = tm[1]!.trim();
+    }
+    return { to, type };
+  });
   const idx = entries.findIndex((e) => e.to === edge.to);
   if (idx >= 0) entries[idx]!.type = edge.type;
   else entries.push({ to: edge.to, type: edge.type });
-  let out = header;
+
+  let out = headerLine;
   for (const e of entries) {
     out += `\n  - to: ${e.to}\n    type: ${e.type}`;
   }
-  if (trailing) out += "\n" + trailing;
+  if (trailing.length > 0) out += "\n" + trailing.join("\n");
   return out + "\n";
 }
 
