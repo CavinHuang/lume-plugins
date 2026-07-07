@@ -50,3 +50,43 @@ test("read_palace 链路:GET /palace/:room", async () => {
 
   await new Promise<void>((r) => srv.close(() => r()));
 });
+
+test("graphNeighbors 链路:GET /graph/neighbors", async () => {
+  const calls: string[] = [];
+  const srv = http.createServer((req, res) => {
+    calls.push(`${req.method} ${req.url}`);
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ nodes: [{ path: "b.md", depth: 1, via: "a.md" }] }));
+  });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  const port = (srv.address() as { port: number }).port;
+
+  const client = createObsidianClient({
+    baseUrl: `http://127.0.0.1:${port}`,
+    getToken: async () => "T",
+  });
+  const r = await client.graphNeighbors("a.md", 1, "both");
+  assert.equal(r[0].path, "b.md");
+  assert.match(calls[0], /GET \/graph\/neighbors\?path=a\.md&depth=1&direction=both/);
+
+  await new Promise<void>((r) => srv.close(() => r()));
+});
+
+test("graphPath 链路:GET /graph/path 返回 path 与 hops", async () => {
+  const srv = http.createServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ path: ["a.md", "b.md", "c.md"], hops: 2 }));
+  });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  const port = (srv.address() as { port: number }).port;
+
+  const client = createObsidianClient({
+    baseUrl: `http://127.0.0.1:${port}`,
+    getToken: async () => "T",
+  });
+  const r = await client.graphPath("a.md", "c.md");
+  assert.deepEqual(r.path, ["a.md", "b.md", "c.md"]);
+  assert.equal(r.hops, 2);
+
+  await new Promise<void>((r) => srv.close(() => r()));
+});

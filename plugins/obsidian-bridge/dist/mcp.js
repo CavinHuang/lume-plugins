@@ -21192,7 +21192,11 @@ function createObsidianClient(deps) {
     backlinks: async (path) => (await req("GET", "/backlinks", { query: { path } })).backlinks,
     readPalace: (room) => req("GET", `/palace/${encodeURIComponent(room)}`),
     listNotes: async (prefix) => (await req("GET", "/notes", { query: { list: prefix } })).paths,
-    diagnostics: () => req("GET", "/diagnostics")
+    diagnostics: () => req("GET", "/diagnostics"),
+    graphNeighbors: async (path, depth, direction) => (await req("GET", "/graph/neighbors", {
+      query: { path, depth: String(depth), direction }
+    })).nodes,
+    graphPath: async (from, to) => req("GET", "/graph/path", { query: { from, to } })
   };
 }
 
@@ -21347,6 +21351,28 @@ function registerTools(server2, client2, options = {}) {
     async () => toolText(async () => {
       const d = await client2.diagnostics();
       return JSON.stringify(d);
+    })
+  );
+  server2.tool(
+    "graph_neighbors",
+    "List notes within N hops (default 1, max 3) of a note, via wiki-link graph. direction: fwd (outgoing) | back (incoming) | both.",
+    {
+      path: zod_default.string(),
+      depth: zod_default.number().optional(),
+      direction: zod_default.enum(["fwd", "back", "both"]).optional()
+    },
+    async ({ path, depth, direction }) => toolText(async () => {
+      const nodes = await client2.graphNeighbors(path, depth ?? 1, direction ?? "both");
+      return JSON.stringify(nodes);
+    })
+  );
+  server2.tool(
+    "graph_path",
+    "Find the shortest wiki-link path between two notes. Returns {path:[...], hops:n}; empty path if unreachable.",
+    { from: zod_default.string(), to: zod_default.string() },
+    async ({ from, to }) => toolText(async () => {
+      const r = await client2.graphPath(from, to);
+      return JSON.stringify(r);
     })
   );
 }

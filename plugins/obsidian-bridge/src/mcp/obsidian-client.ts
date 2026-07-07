@@ -45,6 +45,12 @@ export interface ObsidianClient {
     orphans: string[];
     rawUndigested: string[];
   }>;
+  graphNeighbors(
+    path: string,
+    depth: number,
+    direction: "fwd" | "back" | "both",
+  ): Promise<{ path: string; depth: number; via: string }[]>;
+  graphPath(from: string, to: string): Promise<{ path: string[]; hops: number }>;
 }
 
 export interface ClientDeps {
@@ -137,5 +143,12 @@ export function createObsidianClient(deps: ClientDeps): ObsidianClient {
     readPalace: (room) => req("GET", `/palace/${encodeURIComponent(room)}`),
     listNotes: async (prefix) => (await req("GET", "/notes", { query: { list: prefix } })).paths,
     diagnostics: () => req("GET", "/diagnostics"),
+    graphNeighbors: async (path, depth, direction) =>
+      (
+        await req("GET", "/graph/neighbors", {
+          query: { path, depth: String(depth), direction },
+        })
+      ).nodes,
+    graphPath: async (from, to) => req("GET", "/graph/path", { query: { from, to } }),
   };
 }

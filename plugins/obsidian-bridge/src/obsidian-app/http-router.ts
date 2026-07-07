@@ -185,6 +185,23 @@ export function createRouter(deps: RouterDeps) {
       const md = await deps.getRoomMarkdown(room);
       return { status: 200, body: parseRoomCard(md) };
     }
+    // /graph/neighbors(N 跳邻居;depth 钳制 1..3,direction 规范化 fwd|back|both)
+    if (req.method === "GET" && req.path === "/graph/neighbors") {
+      const q = req.query ?? {};
+      const depth = Math.min(Math.max(Number(q.depth ?? 1) || 1, 1), 3); // clamp 1..3
+      const direction = (q.direction === "fwd" || q.direction === "back" ? q.direction : "both") as
+        | "fwd"
+        | "back"
+        | "both";
+      const nodes = await deps.vault.graphNeighbors(q.path ?? "", depth, direction);
+      return { status: 200, body: { nodes } };
+    }
+    // /graph/path(最短路径 + hops)
+    if (req.method === "GET" && req.path === "/graph/path") {
+      const q = req.query ?? {};
+      const path = await deps.vault.graphPath(q.from ?? "", q.to ?? "");
+      return { status: 200, body: { path, hops: Math.max(0, path.length - 1) } };
+    }
     // /events(SSE 占位:Phase 1 返回 501,Phase 2 实现推送)
     if (req.method === "GET" && req.path === "/events") {
       return err(ERROR_CODES.not_found, "events stream not implemented in Phase 1", 501);

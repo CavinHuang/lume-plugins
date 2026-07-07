@@ -140,6 +140,32 @@ export function registerTools(
       return JSON.stringify(d);
     }),
   );
+
+  server.tool(
+    "graph_neighbors",
+    "List notes within N hops (default 1, max 3) of a note, via wiki-link graph. direction: fwd (outgoing) | back (incoming) | both.",
+    {
+      path: z.string(),
+      depth: z.number().optional(),
+      direction: z.enum(["fwd", "back", "both"]).optional(),
+    },
+    async ({ path, depth, direction }) =>
+      toolText(async () => {
+        const nodes = await client.graphNeighbors(path, depth ?? 1, direction ?? "both");
+        return JSON.stringify(nodes);
+      }),
+  );
+
+  server.tool(
+    "graph_path",
+    "Find the shortest wiki-link path between two notes. Returns {path:[...], hops:n}; empty path if unreachable.",
+    { from: z.string(), to: z.string() },
+    async ({ from, to }) =>
+      toolText(async () => {
+        const r = await client.graphPath(from, to);
+        return JSON.stringify(r);
+      }),
+  );
 }
 
 async function toolText(run: () => Promise<string>): Promise<{ content: Array<{ type: "text"; text: string }> }> {

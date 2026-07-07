@@ -174,6 +174,74 @@ test("/health 的 appVersion 来自注入而非写死", async () => {
   assert.equal((res.body as { appVersion: string }).appVersion, "9.9.9");
 });
 
+test("GET /graph/neighbors 返回 N 跳邻居", async () => {
+  const token = freshToken();
+  const r = createRouter({
+    ...base,
+    appVersion: "0",
+    vault: mockVault({
+      graphNeighbors() {
+        return [{ path: "b.md", depth: 1, via: "a.md" }];
+      },
+    } as Partial<VaultService>),
+  });
+  const res = await r({
+    method: "GET",
+    path: "/graph/neighbors",
+    headers: { authorization: `Bearer ${token}` },
+    body: "",
+    query: { path: "a.md", depth: "1", direction: "both" },
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual((res.body as { nodes: { path: string }[] }).nodes[0].path, "b.md");
+});
+
+test("GET /graph/path 返回最短路径", async () => {
+  const token = freshToken();
+  const r = createRouter({
+    ...base,
+    appVersion: "0",
+    vault: mockVault({
+      graphPath() {
+        return ["a.md", "b.md", "c.md"];
+      },
+    } as Partial<VaultService>),
+  });
+  const res = await r({
+    method: "GET",
+    path: "/graph/path",
+    headers: { authorization: `Bearer ${token}` },
+    body: "",
+    query: { from: "a.md", to: "c.md" },
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual((res.body as { path: string[] }).path, ["a.md", "b.md", "c.md"]);
+});
+
+test("GET /graph/neighbors 将 depth 钳制到 1..3 并规范化 direction", async () => {
+  const token = freshToken();
+  const calls: { depth: number; direction: string }[] = [];
+  const r = createRouter({
+    ...base,
+    appVersion: "0",
+    vault: mockVault({
+      graphNeighbors(_p, depth, direction) {
+        calls.push({ depth, direction });
+        return [];
+      },
+    } as Partial<VaultService>),
+  });
+  // depth=99 钳到 3,direction=invalid 规范化为 both
+  await r({
+    method: "GET",
+    path: "/graph/neighbors",
+    headers: { authorization: `Bearer ${token}` },
+    body: "",
+    query: { path: "a.md", depth: "99", direction: "sideways" },
+  });
+  assert.deepEqual(calls[0], { depth: 3, direction: "both" });
+});
+
 interface ApiErr {
   error: { code: string; message: string };
 }
