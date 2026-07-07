@@ -31,14 +31,36 @@ function memVault(): VaultService {
       store.delete(p);
     },
     async search(q) {
-      const r: { path: string; snippet: string; score: number }[] = [];
-      for (const [p, c] of store) if (c.includes(q)) r.push({ path: p, snippet: c.slice(0, 30), score: 1 });
+      const r: { path: string; snippet: string; score: number; mtime: number }[] = [];
+      for (const [p, c] of store)
+        if (c.includes(q)) r.push({ path: p, snippet: c.slice(0, 30), score: 1, mtime: 0 });
       return r;
     },
     async metadata() {
       return { tags: [], frontmatter: {}, mtime: 0, ctime: 0 };
     },
     async backlinks() {
+      return [];
+    },
+    async listNotes() {
+      return [...store.keys()];
+    },
+    async diagnostics() {
+      return { brokenLinks: [], orphans: [], rawUndigested: [] };
+    },
+    buildAdjacencies() {
+      return { fwd: new Map(), back: new Map(), both: new Map() };
+    },
+    graphNeighbors() {
+      return [];
+    },
+    graphPath() {
+      return [];
+    },
+    graphStructure() {
+      return { hubs: [], orphans: [], bridges: [] };
+    },
+    graphSimilar() {
       return [];
     },
   };
@@ -55,6 +77,7 @@ test("digest smoke: pair → read_palace → read_note → upsert inbox", async 
     vault,
     pairing,
     vaultName: "Smoke",
+    appVersion: "test",
     getRoomMarkdown: async (room) => vault.read(`palace/${room}.md`),
   });
 

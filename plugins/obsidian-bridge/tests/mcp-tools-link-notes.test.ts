@@ -18,21 +18,23 @@ class FakeServer {
 function makeClient(): ObsidianClient & {
   reads: string[];
   writes: { path: string; content: string }[];
+  _nextContent: string;
 } {
   const reads: string[] = [];
   const writes: { path: string; content: string }[] = [];
-  return {
+  const client = {
     reads,
     writes,
+    _nextContent: "",
     health: async () => ({ ok: true, protocol: 1, appVersion: "1.7.0", vaultName: "Vault" }),
     pair: async () => ({ token: "T", vaultName: "Vault" }),
-    readNote: async function (path: string) {
+    readNote: async (path: string) => {
       reads.push(path);
-      return { path, content: this._nextContent ?? "" };
-    } as ObsidianClient["readNote"],
-    upsertNote: async function (path: string, content: string) {
+      return { path, content: client._nextContent ?? "" };
+    },
+    upsertNote: async (path: string, content: string) => {
       writes.push({ path, content });
-    } as ObsidianClient["upsertNote"],
+    },
     patchNote: async () => {},
     deleteNote: async () => {},
     search: async () => [],
@@ -47,8 +49,12 @@ function makeClient(): ObsidianClient & {
     }),
     listNotes: async () => [],
     diagnostics: async () => ({ brokenLinks: [], orphans: [], rawUndigested: [] }),
-    _nextContent: "",
-  } as unknown as ObsidianClient & {
+    graphNeighbors: async () => [],
+    graphPath: async () => ({ path: [], hops: 0 }),
+    graphStructure: async () => ({ hubs: [], orphans: [], bridges: [] }),
+    graphSimilar: async () => [],
+  };
+  return client as ObsidianClient & {
     reads: string[];
     writes: { path: string; content: string }[];
     _nextContent: string;

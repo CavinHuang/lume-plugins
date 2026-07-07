@@ -7,7 +7,7 @@ function mockApp(
   files: Record<
     string,
     {
-      content: string;
+      content?: string;
       mtime?: number;
       frontmatter?: Record<string, unknown>;
       tags?: string[];
@@ -22,7 +22,7 @@ function mockApp(
     Object.entries(files).map(([k, v]) => [
       k,
       {
-        content: v.content,
+        content: v.content ?? "",
         mtime: v.mtime ?? 1000,
         ctime: 500,
         frontmatter: v.frontmatter ?? {},
