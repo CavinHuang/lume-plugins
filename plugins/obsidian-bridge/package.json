@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "tsx --test \"tests/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
     "build:obsidian": "node esbuild.config.mjs --target=obsidian",
     "build:mcp": "node esbuild.config.mjs --target=mcp"
   },

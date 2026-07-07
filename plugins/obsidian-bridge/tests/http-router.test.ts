@@ -30,6 +30,22 @@ function mockVault(over: Partial<VaultService> = {}): VaultService {
     async diagnostics() {
       return { brokenLinks: [], orphans: [], rawUndigested: [] };
     },
+    // 图谱方法默认空实现(各 graph_* 路由测试通过 over 覆盖)。补齐以满足 VaultService 契约。
+    buildAdjacencies() {
+      return { fwd: new Map(), back: new Map(), both: new Map() };
+    },
+    graphNeighbors() {
+      return [];
+    },
+    graphPath() {
+      return [];
+    },
+    graphStructure() {
+      return { hubs: [], orphans: [], bridges: [] };
+    },
+    graphSimilar() {
+      return [];
+    },
     ...over,
   };
 }
