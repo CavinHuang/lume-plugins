@@ -57,6 +57,7 @@ test("runtime descriptor advertises only implemented extension capabilities", as
         { id: "pageAssets", description: "Inventory and bundle rendered page assets." },
         { id: "cdp", description: "Read buffered CDP events and send permitted CDP commands." },
         { id: "botDetection", description: "Report bot detection or access-control blockers for this tab." },
+        { id: "browserAuth", description: "Securely collect user credentials and fill validated login forms." },
       ],
     },
     apiSupportOverrides: {
@@ -86,6 +87,7 @@ test("runtime descriptor advertises only implemented extension capabilities", as
       contentExport: "available",
       fileChooser: "available",
       downloads: "available",
+      browserAuth: "available",
     },
   });
   assert.deepEqual(browsers.slice(1).map((browser) => browser.clientType), ["iab", "cdp"]);
@@ -130,6 +132,13 @@ test("runtime capability commands match the advertised descriptor surface", asyn
       name: "Bot detection",
       scope: "tab",
       description: "Report bot detection or access-control blockers for this tab.",
+      state: "available",
+    },
+    {
+      id: "browserAuth",
+      name: "Browser auth",
+      scope: "tab",
+      description: "Securely collect user credentials and fill a validated login form without returning values to the agent.",
       state: "available",
     },
   ]);

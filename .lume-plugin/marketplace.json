@@ -31,6 +31,15 @@
       "author": {
         "name": "CavinHuang"
       }
+    },
+    {
+      "name": "spreadsheets",
+      "description": "专业电子表格制作方法论与领域规范:公式/格式/图表/数据完整性的最佳实践,覆盖财务建模、医疗、营销、科研等场景。触发词:Excel/CSV/xlsx/工作簿/公式/图表/spreadsheet。",
+      "version": "0.1.0",
+      "source": "./plugins/spreadsheets",
+      "author": {
+        "name": "CavinHuang"
+      }
     }
   ],
   "skills": []
