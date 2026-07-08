@@ -15,13 +15,32 @@
         "id": "install-extension",
         "title": "安装 Chrome 扩展",
         "description": "在 Chrome 扩展页加载或安装插件包内的 MV3 扩展,确保扩展处于启用状态。",
-        "kind": "install"
+        "kind": "install",
+        "artifact": { "path": "./lume-browser-extension-v4.zip", "kind": "chrome-extension" },
+        "targetApp": {
+          "kind": "chrome",
+          "installHint": "chrome://extensions → 加载已解压的扩展程序"
+        },
+        "verify": {
+          "method": "chrome-extension",
+          "detail": "<extension-id: 构建后从 chrome://extensions 获取>"
+        }
       },
       {
         "id": "install-native-host",
         "title": "安装 Native Host",
         "description": "构建 Native Host 后设置 LUME_EXTENSION_ID、LUME_CHROME_HOST_PATH 和 LUME_APP_SERVER_URL,再运行 npm run install:native-host。",
-        "kind": "local-service"
+        "kind": "local-service",
+        "build": {
+          "command": "cargo build --release",
+          "cwd": "./native-host",
+          "prerequisites": "需要本机已安装 Rust 工具链",
+          "env": {
+            "LUME_EXTENSION_ID": "<extension-id: 构建后从 chrome://extensions 获取>",
+            "LUME_CHROME_HOST_PATH": "<target/release/lume-chrome-host 绝对路径>",
+            "LUME_APP_SERVER_URL": "ws://127.0.0.1:43127/browser"
+          }
+        }
       },
       {
         "id": "keep-chrome-ready",

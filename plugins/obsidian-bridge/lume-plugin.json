@@ -15,13 +15,23 @@
         "id": "install-obsidian-plugin",
         "title": "安装 Obsidian 端插件",
         "description": "将 main.js 与 manifest.json 放入 Vault 的 .obsidian/plugins/obsidian-bridge/ 目录,然后在 Obsidian 社区插件中启用。",
-        "kind": "install"
+        "kind": "install",
+        "artifact": { "path": "./dist/main.js", "kind": "obsidian-plugin" },
+        "download": {
+          "url": "https://github.com/CavinHuang/lume-plugins/releases/download/obsidian-bridge-v0.1.2/manifest.json",
+          "filename": "manifest.json"
+        },
+        "targetApp": {
+          "kind": "obsidian",
+          "installHint": "<Vault>/.obsidian/plugins/obsidian-bridge/"
+        }
       },
       {
         "id": "enable-local-bridge",
         "title": "确认本地桥接服务",
         "description": "保持 Obsidian 打开,确认桥接插件监听 127.0.0.1:43112,只允许本机 Lume 访问。",
-        "kind": "local-service"
+        "kind": "local-service",
+        "verify": { "method": "tcp-port", "detail": "127.0.0.1:43112" }
       },
       {
         "id": "copy-pairing-code",
