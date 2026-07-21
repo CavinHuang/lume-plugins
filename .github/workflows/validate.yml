@@ -6,10 +6,12 @@ on:
       - "plugins/**"
       - "skills/**"
       - "scripts/**"
+      - "service/**"
       - ".lume-plugin/marketplace.json"
+      - "docker-compose.yml"
+      - ".dockerignore"
       - "package.json"
       - ".github/workflows/validate.yml"
-      - ".github/workflows/publish-index.yml"
   workflow_dispatch:
 
 jobs:

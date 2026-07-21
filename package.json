@@ -8,7 +8,9 @@
   "scripts": {
     "test": "node --test",
     "build:index": "node scripts/build-index.mjs",
-    "check:index": "node scripts/build-index.mjs --check"
+    "check:index": "node scripts/build-index.mjs --check",
+    "mirror:start": "node service/server.mjs",
+    "mirror:build": "node service/build-snapshot.mjs"
   },
   "license": "MIT"
 }
