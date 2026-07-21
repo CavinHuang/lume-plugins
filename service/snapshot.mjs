@@ -112,9 +112,10 @@ async function validateDeclaredFiles(root, manifest) {
     if (assetPath) await inspectTree(await assertContainedPath(root, join(root, normalizeRelativePath(assetPath))), MAX_ASSET_BYTES, 1);
   }
   for (const step of Array.isArray(manifest.marketplace?.setup) ? manifest.marketplace.setup : []) {
-    if (step?.artifact?.path) {
+    for (const artifact of [step?.artifact, ...(Array.isArray(step?.artifacts) ? step.artifacts : [])]) {
+      if (!artifact?.path) continue;
       await inspectTree(
-        await assertContainedPath(root, join(root, normalizeRelativePath(step.artifact.path))),
+        await assertContainedPath(root, join(root, normalizeRelativePath(artifact.path))),
         MAX_ARTIFACT_BYTES,
         MAX_ARTIFACT_FILES,
       );
