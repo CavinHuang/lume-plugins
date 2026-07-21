@@ -13,5 +13,5 @@ test("zip-extension creates the extension archive on this platform", () => {
 
   assert.equal(result.status, 0, output);
   assert.doesNotMatch(output, /ENOENT/);
-  assert.ok(existsSync(new URL("lume-browser-extension-v4.zip", root)));
+  assert.ok(existsSync(new URL("lume-browser-extension-v5.zip", root)));
 });
