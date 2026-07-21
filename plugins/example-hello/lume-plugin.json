@@ -6,6 +6,9 @@
   "author": "CavinHuang",
   "displayName": "Example Hello",
   "category": "Developer",
+  "marketplace": {
+    "icon": "./assets/logo.png"
+  },
   "skills": ["./skills/"],
   "hooks": "./hooks/hooks.json",
   "mcpServers": "./mcp.json",

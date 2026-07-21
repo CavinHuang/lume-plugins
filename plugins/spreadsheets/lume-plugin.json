@@ -6,5 +6,8 @@
   "author": "CavinHuang",
   "displayName": "Spreadsheets",
   "category": "Productivity",
+  "marketplace": {
+    "icon": "./assets/logo.png"
+  },
   "skills": ["./skills/"]
 }
