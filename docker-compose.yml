@@ -1,0 +1,16 @@
+name: lume-plugin-market
+
+services:
+  mirror:
+    build:
+      context: .
+      dockerfile: service/Dockerfile
+    image: lume-plugin-market-mirror:latest
+    restart: unless-stopped
+    ports:
+      - "${MIRROR_BIND_ADDRESS:-127.0.0.1}:${MIRROR_PORT:-8787}:8787"
+    volumes:
+      - mirror-data:/data
+
+volumes:
+  mirror-data:

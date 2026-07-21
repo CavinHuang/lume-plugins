@@ -1,0 +1,8 @@
+.github
+.serena
+.superpowers
+**/node_modules
+**/.build
+**/target
+**/*.log
+docs
