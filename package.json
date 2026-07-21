@@ -9,6 +9,7 @@
     "test": "node --test",
     "build:index": "node scripts/build-index.mjs",
     "check:index": "node scripts/build-index.mjs --check",
+    "check:chrome-runtime": "node scripts/verify-native-host-artifacts.mjs",
     "mirror:start": "node service/server.mjs",
     "mirror:build": "node service/build-snapshot.mjs"
   },
