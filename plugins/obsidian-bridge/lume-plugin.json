@@ -7,7 +7,7 @@
   "displayName": "Obsidian Bridge",
   "category": "Knowledge",
   "marketplace": {
-    "icon": "./assets/icon.svg",
+    "icon": "./assets/logo.png",
     "thumbnail": "./assets/thumbnail.svg",
     "docs": "./README.md",
     "setup": [

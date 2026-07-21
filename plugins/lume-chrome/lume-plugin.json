@@ -7,7 +7,7 @@
   "displayName": "Lume Browse",
   "category": "Browser",
   "marketplace": {
-    "icon": "./extension/icons/icon128.png",
+    "icon": "./assets/logo.png",
     "thumbnail": "./assets/thumbnail.svg",
     "docs": "./README.md",
     "setup": [
