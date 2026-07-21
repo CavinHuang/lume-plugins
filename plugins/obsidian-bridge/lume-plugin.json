@@ -16,11 +16,7 @@
         "title": "安装 Obsidian 端插件",
         "description": "将 main.js 与 manifest.json 放入 Vault 的 .obsidian/plugins/obsidian-bridge/ 目录,然后在 Obsidian 社区插件中启用。",
         "kind": "install",
-        "artifact": { "path": "./dist/main.js", "kind": "obsidian-plugin" },
-        "download": {
-          "url": "https://github.com/CavinHuang/lume-plugins/releases/download/obsidian-bridge-v0.1.2/manifest.json",
-          "filename": "manifest.json"
-        },
+        "artifact": { "path": "./dist/obsidian-plugin", "kind": "obsidian-plugin" },
         "targetApp": {
           "kind": "obsidian",
           "installHint": "<Vault>/.obsidian/plugins/obsidian-bridge/"
