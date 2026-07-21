@@ -41,7 +41,12 @@ test("生成不可变镜像并提供 catalog/raw/archive", async (context) => {
   });
   writeFileSync(join(source, "plugins", "healthy", "README.md"), "# Healthy");
   writeFileSync(join(source, "plugins", "healthy", "package", "main.js"), "ok");
-  writeJson(join(source, "plugins", "broken", "lume-plugin.json"), { schema: "lume-plugin/v1" });
+  writeJson(join(source, "plugins", "broken", "lume-plugin.json"), {
+    schema: "lume-plugin/v1",
+    name: "broken",
+    version: "1.0.0",
+    marketplace: { icon: "./assets/missing.svg" },
+  });
   const config = {
     host: "127.0.0.1",
     port: 0,

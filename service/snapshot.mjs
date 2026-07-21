@@ -108,7 +108,8 @@ async function createCatalog(config, sourceRoot, manifest) {
 
 async function validateDeclaredFiles(root, manifest) {
   for (const asset of [manifest.marketplace?.icon, manifest.marketplace?.thumbnail, manifest.marketplace?.hero]) {
-    if (asset?.path) await inspectTree(await assertContainedPath(root, join(root, normalizeRelativePath(asset.path))), MAX_ASSET_BYTES, 1);
+    const assetPath = typeof asset === "string" ? asset : asset?.path;
+    if (assetPath) await inspectTree(await assertContainedPath(root, join(root, normalizeRelativePath(assetPath))), MAX_ASSET_BYTES, 1);
   }
   for (const step of Array.isArray(manifest.marketplace?.setup) ? manifest.marketplace.setup : []) {
     if (step?.artifact?.path) {

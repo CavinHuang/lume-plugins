@@ -1,4 +1,5 @@
 import esbuild from "esbuild";
+import { copyFile, mkdir } from "node:fs/promises";
 
 const target = process.argv.includes("--target=mcp") ? "mcp" : "obsidian";
 
@@ -13,6 +14,11 @@ if (target === "obsidian") {
     external: ["obsidian", "electron"],
     logLevel: "info",
   });
+  await mkdir("dist/obsidian-plugin", { recursive: true });
+  await Promise.all([
+    copyFile("dist/main.js", "dist/obsidian-plugin/main.js"),
+    copyFile("src/obsidian-app/manifest.json", "dist/obsidian-plugin/manifest.json"),
+  ]);
 } else {
   await esbuild.build({
     entryPoints: ["src/mcp/server.ts"],
