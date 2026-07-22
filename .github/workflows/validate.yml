@@ -26,3 +26,5 @@ jobs:
         run: npm test
       - name: 索引一致性 + 权限审计 + 结构校验
         run: npm run check:index
+      - name: Native Host 产物架构校验
+        run: npm run check:chrome-runtime

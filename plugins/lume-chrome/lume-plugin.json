@@ -1,7 +1,7 @@
 {
   "schema": "lume-plugin/v1",
   "name": "lume-chrome",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Control Chrome through Lume's built-in node_repl MCP bridge.",
   "author": "CavinHuang",
   "displayName": "Lume Browse",
@@ -16,30 +16,36 @@
         "title": "安装 Chrome 扩展",
         "description": "在 Chrome 扩展页加载或安装插件包内的 MV3 扩展,确保扩展处于启用状态。",
         "kind": "install",
-        "artifact": { "path": "./lume-browser-extension-v4.zip", "kind": "chrome-extension" },
+        "artifact": { "path": "./lume-browser-extension-v5.zip", "kind": "chrome-extension" },
         "targetApp": {
           "kind": "chrome",
           "installHint": "chrome://extensions → 加载已解压的扩展程序"
         },
         "verify": {
           "method": "chrome-extension",
-          "detail": "<extension-id: 构建后从 chrome://extensions 获取>"
+          "detail": "hgoclajdgiicjpnggdkjidkopoleddoe"
         }
       },
       {
         "id": "install-native-host",
         "title": "安装 Native Host",
-        "description": "构建 Native Host 后设置 LUME_EXTENSION_ID、LUME_CHROME_HOST_PATH 和 LUME_APP_SERVER_URL,再运行 npm run install:native-host。",
-        "kind": "local-service",
-        "build": {
-          "command": "cargo build --release",
-          "cwd": "./native-host",
-          "prerequisites": "需要本机已安装 Rust 工具链",
-          "env": {
-            "LUME_EXTENSION_ID": "<extension-id: 构建后从 chrome://extensions 获取>",
-            "LUME_CHROME_HOST_PATH": "<target/release/lume-chrome-host 绝对路径>",
-            "LUME_APP_SERVER_URL": "ws://127.0.0.1:43127/browser"
-          }
+        "description": "点击安装后,Lume 会选择当前平台的预编译 Native Host,完成校验、写入和 Chrome Native Messaging 注册。无需 Rust、npm 或命令行。",
+        "kind": "install",
+        "artifacts": [
+          { "path": "./runtime/win32-x64/lume-chrome-host.exe", "kind": "native-binary", "platform": "win32", "arch": "x64" },
+          { "path": "./runtime/darwin-x64/lume-chrome-host", "kind": "native-binary", "platform": "darwin", "arch": "x64" },
+          { "path": "./runtime/darwin-arm64/lume-chrome-host", "kind": "native-binary", "platform": "darwin", "arch": "arm64" },
+          { "path": "./runtime/linux-x64/lume-chrome-host", "kind": "native-binary", "platform": "linux", "arch": "x64" }
+        ],
+        "installer": {
+          "kind": "chrome-native-host",
+          "hostName": "com.lume.browser",
+          "extensionId": "hgoclajdgiicjpnggdkjidkopoleddoe",
+          "appServerUrl": "ws://127.0.0.1:43127/browser"
+        },
+        "targetApp": {
+          "kind": "system-path",
+          "installHint": "由 Lume 安装到当前用户目录并注册到 Chrome"
         }
       },
       {

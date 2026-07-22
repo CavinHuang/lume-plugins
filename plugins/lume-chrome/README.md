@@ -21,10 +21,12 @@ recreated in the in-app browser.
 
 ## Setup in Lume
 
-1. Install or load the MV3 Chrome extension from this plugin package and keep it
-   enabled in Chrome.
-2. Build the Native Host, set `LUME_EXTENSION_ID`, `LUME_CHROME_HOST_PATH`, and
-   `LUME_APP_SERVER_URL`, then run `npm run install:native-host`.
+1. Save and extract the MV3 Chrome extension package from the plugin detail
+   page, then load that folder once from `chrome://extensions`.
+2. Click **Install Native Host** in Lume. Lume selects the precompiled runtime
+   for the current platform, verifies it, installs it in the current user's Lume
+   directory, and registers it with Chrome. No Rust, npm, environment variables,
+   or command line are required.
 3. Keep Chrome and Lume running. The extension popup should show that the Native
    Host is connected to the local Lume app server.
 4. When Chrome control reaches a sensitive action such as login, clipboard,
@@ -71,10 +73,10 @@ npm test
 npm run zip:extension
 ```
 
-Build the Native Host separately with Cargo, then set `LUME_EXTENSION_ID`,
-`LUME_CHROME_HOST_PATH`, and `LUME_APP_SERVER_URL` before running
-`npm run install:native-host`. If `LUME_APP_SERVER_URL` is omitted, the host
-uses `ws://127.0.0.1:43127/browser`, matching the node_repl bridge default.
+Native Host release binaries are built by
+`.github/workflows/build-lume-chrome-native-host.yml`. The local
+`npm run install:native-host` script remains available only for contributors
+testing a locally compiled Host.
 
 ## Lume skill entrypoint
 

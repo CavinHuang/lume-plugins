@@ -1,0 +1,52 @@
+name: build-lume-chrome-native-host
+
+on:
+  pull_request:
+    paths:
+      - "plugins/lume-chrome/native-host/**"
+      - ".github/workflows/build-lume-chrome-native-host.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            target: win32-x64
+            binary: lume-chrome-host.exe
+          - runner: macos-15-intel
+            target: darwin-x64
+            binary: lume-chrome-host
+          - runner: macos-15
+            target: darwin-arm64
+            binary: lume-chrome-host
+          - runner: ubuntu-24.04
+            target: linux-x64
+            binary: lume-chrome-host
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: plugins/lume-chrome
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/lume-chrome/native-host
+      - name: Build release binary
+        run: cargo build --release --locked --manifest-path native-host/Cargo.toml
+      - name: Stage runtime
+        run: |
+          mkdir -p "runtime/${{ matrix.target }}"
+          cp "native-host/target/release/${{ matrix.binary }}" "runtime/${{ matrix.target }}/${{ matrix.binary }}"
+          chmod +x "runtime/${{ matrix.target }}/${{ matrix.binary }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lume-chrome-host-${{ matrix.target }}
+          path: plugins/lume-chrome/runtime/${{ matrix.target }}/${{ matrix.binary }}
+          if-no-files-found: error
+          retention-days: 14

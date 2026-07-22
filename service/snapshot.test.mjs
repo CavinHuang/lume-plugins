@@ -37,7 +37,13 @@ test("生成不可变镜像并提供 catalog/raw/archive", async (context) => {
     schema: "lume-plugin/v1",
     name: "healthy",
     version: "1.0.0",
-    marketplace: { setup: [{ id: "export", artifact: { path: "./package", kind: "file" } }] },
+    marketplace: { setup: [{
+      id: "export",
+      artifacts: [
+        { path: "./package", kind: "file", platform: "linux", arch: "x64" },
+        { path: "./missing-host", kind: "native-binary", platform: "win32", arch: "x64" },
+      ],
+    }] },
   });
   writeFileSync(join(source, "plugins", "healthy", "README.md"), "# Healthy");
   writeFileSync(join(source, "plugins", "healthy", "package", "main.js"), "ok");
@@ -59,9 +65,8 @@ test("生成不可变镜像并提供 catalog/raw/archive", async (context) => {
     repositoryUrl: "https://github.com/acme/plugins",
   };
   const snapshot = await buildSnapshot(config);
-  assert.deepEqual(snapshot.plugins.map((plugin) => plugin.id), ["healthy"]);
-  assert.equal(snapshot.plugins[0].manifest.name, "healthy");
-  assert.equal(snapshot.diagnostics[0].itemId, "broken");
+  assert.deepEqual(snapshot.plugins.map((plugin) => plugin.id), []);
+  assert.deepEqual(snapshot.diagnostics.map((entry) => entry.itemId), ["healthy", "broken"]);
 
   const { server } = await startMirrorServer(config);
   context.after(() => new Promise((resolve) => server.close(resolve)));
