@@ -6,6 +6,15 @@
   },
   "plugins": [
     {
+      "name": "browser",
+      "description": "Lume 自有内置浏览器 Agent 能力插件。",
+      "version": "1.0.0",
+      "source": "./plugins/browser",
+      "author": {
+        "name": "Lume Team"
+      }
+    },
+    {
       "name": "example-hello",
       "description": "示例插件:演示 Lume 市场收录的标准结构、技能/hook/mcp 接线与权限说明写法",
       "version": "1.0.0",
@@ -16,7 +25,7 @@
     },
     {
       "name": "lume-chrome",
-      "description": "Control Chrome through Lume's built-in node_repl MCP bridge.",
+      "description": "Provide an authenticated external Chrome backend for Lume Browser.",
       "version": "0.5.0",
       "source": "./plugins/lume-chrome",
       "author": {
