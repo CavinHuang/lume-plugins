@@ -60,10 +60,11 @@ async function locatorOperation<T>(tabId:number, ast:LocatorAst, operation:strin
     if(current.length===0)throw new Error("Locator resolved to no elements");
     if(strict&&current.length!==1)throw new Error(`Strict locator violation: resolved to ${current.length} elements`);
     const el=current[0] as AnyEl;
-    if(["click","dblclick","fill","press","type","selectOption","setChecked","check","uncheck"].includes(op)){
+    if(["actionPoint","click","dblclick","hover","scroll","fill","press","type","selectOption","setChecked","check","uncheck"].includes(op)){
       if(!visible(el))throw new Error("Element is not visible");if(!enabled(el))throw new Error("Element is disabled");
       (el as HTMLElement).scrollIntoView({block:"center",inline:"center"});await new Promise(r=>requestAnimationFrame(()=>r(undefined)));
     }
+    if(op==="actionPoint"){const r=(el as HTMLElement).getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2} as any;}
     if(op==="click"){(el as HTMLElement).click();return undefined as any;}
     if(op==="dblclick"){el.dispatchEvent(new MouseEvent("dblclick",{bubbles:true,cancelable:true,view:window}));return undefined as any;}
     if(op==="fill"){el.focus?.();if(!("value" in el))throw new Error("Element is not fillable");el.value=String(p.text??"");el.dispatchEvent(new InputEvent("input",{bubbles:true,data:String(p.text??""),inputType:"insertText"}));el.dispatchEvent(new Event("change",{bubbles:true}));return undefined as any;}

@@ -33,7 +33,7 @@ class FakeElement {
     this.focused = true;
   }
 
-  scrollIntoView() {}
+  scrollIntoView() { this.scrolledIntoView = true; }
 
   setSelectionRange(start, end) {
     this.selectionStart = start;
@@ -165,6 +165,21 @@ test("PlaywrightFacade type appends text without clearing the existing value", a
 
   assert.equal(input.value, "hello world");
   assert.deepEqual(input.events, ["input", "change"]);
+});
+
+test("PlaywrightFacade resolves a visible locator action point after scrolling it into view", async () => {
+  const button = new FakeElement("button", { rect: { x: 10, y: 20, width: 120, height: 40 } });
+  const root = new FakeElement("html", { children: [button] });
+  const facade = new PlaywrightFacade({});
+
+  await withFakePage(root, async () => {
+    assert.deepEqual(
+      await facade.operation(1, { version: 1, steps: [{ kind: "locator", selector: "button" }] }, "actionPoint", {}),
+      { x: 70, y: 40 },
+    );
+  });
+
+  assert.equal(button.scrolledIntoView, true);
 });
 
 test("PlaywrightFacade returns element metadata at coordinates", async () => {

@@ -38,7 +38,7 @@ test("runtime descriptor advertises only implemented extension capabilities", as
   const dispatcher = createDispatcher();
   const browsers = await dispatch(dispatcher, "runtime_list_browsers");
 
-  assert.equal(browsers.length, 3);
+  assert.equal(browsers.length, 1);
   assert.deepEqual(browsers[0], {
     id: "chrome-extension",
     browserId: "chrome-extension",
@@ -46,23 +46,38 @@ test("runtime descriptor advertises only implemented extension capabilities", as
     type: "extension",
     clientType: "extension",
     protocolVersion: PROTOCOL_VERSION,
+    minSupported: 5,
+    maxSupported: 5,
+    capabilityHash: "lume-browser-contract-v1-extension",
     generation: 12,
-    metadata: {},
+    metadata: {
+      networkBoundary: "external-chrome-best-effort",
+      credentials: "unavailable",
+      agentDownloads: "unavailable",
+    },
     capabilities: {
       browser: [
         { id: "visibility", description: "Show or hide the browser window." },
         { id: "viewport", description: "Set or reset the browser viewport." },
       ],
       tab: [
-        { id: "pageAssets", description: "Inventory and bundle rendered page assets." },
-        { id: "cdp", description: "Read buffered CDP events and send permitted CDP commands." },
         { id: "botDetection", description: "Report bot detection or access-control blockers for this tab." },
-        { id: "browserAuth", description: "Securely collect user credentials and fill validated login forms." },
       ],
     },
     apiSupportOverrides: {
+      "BrowserUser.history": false,
       "Tabs.content": false,
       "Tab.content": false,
+      "Tab.clipboard": false,
+      "TabClipboardAPI.read": false,
+      "TabClipboardAPI.readText": false,
+      "TabClipboardAPI.write": false,
+      "TabClipboardAPI.writeText": false,
+      "PlaywrightAPI.evaluate": false,
+      "PlaywrightAPI.waitForEvent": false,
+      "PlaywrightLocator.downloadMedia": false,
+      "CUAAPI.downloadMedia": false,
+      "DomCUAAPI.downloadMedia": false,
     },
     permissions: {
       debugger: "granted",
@@ -77,20 +92,18 @@ test("runtime descriptor advertises only implemented extension capabilities", as
     features: {
       openTabs: "available",
       claimTab: "available",
-      cdp: "available",
       cua: "available",
       dom_cua: "available",
-      playwright: "limited",
-      pageAssets: "available",
+      pageAssets: "unavailable",
       tabGroups: "available",
-      history: "limited",
-      contentExport: "available",
-      fileChooser: "available",
-      downloads: "available",
-      browserAuth: "available",
+      history: "unavailable",
+      contentExport: "unavailable",
+      fileChooser: "unavailable",
+      downloads: "unavailable",
+      browserAuth: "unavailable",
     },
   });
-  assert.deepEqual(browsers.slice(1).map((browser) => browser.clientType), ["iab", "cdp"]);
+  assert.deepEqual(browsers.slice(1).map((browser) => browser.clientType), []);
 });
 
 test("runtime capability commands match the advertised descriptor surface", async () => {
@@ -114,45 +127,16 @@ test("runtime capability commands match the advertised descriptor surface", asyn
   ]);
   assert.deepEqual(await dispatch(dispatcher, "tab_capabilities_list"), [
     {
-      id: "pageAssets",
-      name: "Page assets",
-      scope: "tab",
-      description: "Inventory and bundle rendered page assets.",
-      state: "available",
-    },
-    {
-      id: "cdp",
-      name: "CDP",
-      scope: "tab",
-      description: "Read buffered CDP events and send permitted CDP commands.",
-      state: "available",
-    },
-    {
       id: "botDetection",
       name: "Bot detection",
       scope: "tab",
       description: "Report bot detection or access-control blockers for this tab.",
       state: "available",
     },
-    {
-      id: "browserAuth",
-      name: "Browser auth",
-      scope: "tab",
-      description: "Securely collect user credentials and fill a validated login form without returning values to the agent.",
-      state: "available",
-    },
   ]);
   assert.match(
     await dispatch(dispatcher, "browser_capability_documentation", { capabilityId: "visibility" }),
     /set\(true\).*set\(false\)/,
-  );
-  assert.match(
-    await dispatch(dispatcher, "tab_capability_documentation", { capabilityId: "pageAssets" }),
-    /bundle/,
-  );
-  assert.match(
-    await dispatch(dispatcher, "tab_capability_documentation", { capabilityId: "cdp" }),
-    /readEvents/,
   );
   assert.match(
     await dispatch(dispatcher, "tab_capability_documentation", { capabilityId: "botDetection" }),
@@ -173,6 +157,25 @@ test("visibility capability adapts between public booleans and controller state"
   await dispatch(dispatcher, "browser_visibility_set", { visible: false });
 
   assert.equal(received, "hidden");
+});
+
+test("navigation is an adapter action and legacy asset writes fail closed", async () => {
+  const updates = [];
+  const dispatcher = createDispatcher({
+    tabs: { async update(tabId, options) { updates.push({ tabId, options }); } },
+  });
+  dispatcher.sessions.getOrCreate = async () => ({ id: "session" });
+  dispatcher.leases.get = async () => ({ chromeTabId: 42 });
+
+  await dispatch(dispatcher, "navigate_tab_url", {
+    context: { browserSessionId: "session", browserTurnId: "turn" },
+    tabId: "lume-tab:1",
+    url: "https://example.com/",
+  });
+  assert.deepEqual(updates, [{ tabId: 42, options: { url: "https://example.com/", active: true } }]);
+
+  const response = await dispatcher.dispatch({ jsonrpc: "2.0", id: "asset-1", method: "asset_create", params: {} });
+  assert.equal(response.error?.code, "E_UNSUPPORTED");
 });
 
 test("coordinate CUA mouse actions show the overlay cursor before CDP input", async () => {
@@ -237,10 +240,14 @@ test("coordinate CUA mouse actions show the overlay cursor before CDP input", as
 
 test("playwright locator and/or/type resolve through the page facade", async () => {
   const calls = [];
-  const dispatcher = createDispatcher();
+  const dispatcher = createDispatcher({
+    scripting: { executeScript: async () => [{ result: undefined }] },
+    tabs: { sendMessage: async () => ({ ok: true }) },
+  });
   dispatcher.leases.get = async () => ({ chromeTabId: 77 });
   dispatcher.pw.operation = async (tabId, locator, operation, payload) => {
     calls.push({ tabId, locator, operation, payload });
+    if (operation === "actionPoint") return { x: 20, y: 30 };
     return operation === "allTextContents" ? ["value"] : undefined;
   };
 
@@ -261,6 +268,12 @@ test("playwright locator and/or/type resolve through the page facade", async () 
   });
 
   assert.deepEqual(calls, [
+    {
+      tabId: 77,
+      locator,
+      operation: "actionPoint",
+      payload: { tabId: "lume-tab:1", locator, text: " appended", timeoutMs: 250 },
+    },
     {
       tabId: 77,
       locator,

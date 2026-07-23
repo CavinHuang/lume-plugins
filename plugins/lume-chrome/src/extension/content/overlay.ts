@@ -15,7 +15,7 @@ if (!root) {
   shadow.append(cursor, badge);
   document.documentElement.appendChild(root);
   (window as any).__lumeOverlay = {
-    move(x:number,y:number){ cursor.style.left = `${x}px`; cursor.style.top = `${y}px`; setTimeout(()=>chrome.runtime.sendMessage({ type:"AGENT_CURSOR_ARRIVED", x, y }).catch(()=>undefined), 200); },
+    move(x:number,y:number,pulse=false){ cursor.style.left = `${x}px`; cursor.style.top = `${y}px`; if(pulse){cursor.animate?.([{transform:"translate(-50%,-50%) scale(1)"},{transform:"translate(-50%,-50%) scale(.72)"},{transform:"translate(-50%,-50%) scale(1)"}],{duration:260,easing:"ease-out"});} setTimeout(()=>chrome.runtime.sendMessage({ type:"AGENT_CURSOR_ARRIVED", x, y }).catch(()=>undefined), 200); },
     badge(text:string){ badge.textContent = text; }
   };
 }
@@ -23,7 +23,7 @@ const observer = new MutationObserver(() => { if (!document.getElementById(ROOT_
 observer.observe(document.documentElement, { childList:true });
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "LUME_CURSOR_MOVE") {
-    (window as any).__lumeOverlay?.move(message.x, message.y);
+    (window as any).__lumeOverlay?.move(message.x, message.y, message.pulse === true);
     setTimeout(() => sendResponse({ ok: true }), 200);
     return true;
   }

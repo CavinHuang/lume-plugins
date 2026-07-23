@@ -18,6 +18,9 @@ test("plugin manifest matches marketplace identity", async () => {
   assert.equal(manifest.displayName, "Lume Browse");
   assert.deepEqual(manifest.skills, ["./skills/"]);
   assert.deepEqual(manifest.permissions.tools.allow, ["mcp__node_repl__js"]);
+  const nativeHost = manifest.marketplace.setup.find((step) => step.id === "install-native-host");
+  assert.match(nativeHost.description, /写入系统凭证库/);
+  assert.match(manifest.marketplace.setup.find((step) => step.id === "keep-chrome-ready").description, /bridge 配置/);
 });
 
 test("Chrome extension manifest uses Lume Browse identity", async () => {
@@ -38,32 +41,25 @@ test("browser skill starts through Lume node_repl MCP", async () => {
 
   assert.match(skill, /^name:\s*lume-chrome$/m);
   assert.match(skill, /mcp__node_repl__js/);
-  assert.match(skill, /setupNodeReplBrowserRuntime/);
-  assert.match(skill, /var\s+fs\s*=\s*await import/);
-  assert.match(skill, /tabs\.new\(\{\s*url:/);
+  assert.match(skill, /nodeRepl\.browser\.request/);
+  assert.match(skill, /__browserBackend:\s*"extension"/);
+  assert.match(skill, /chromeRequest\("openTabs"\)/);
+  assert.match(skill, /chromeRequest\("claim"/);
+  assert.match(skill, /chromeRequest\("fill"/);
+  assert.match(skill, /chromeRequest\("snapshot"/);
   assert.match(skill, /Do not use top-level `const` or `let`/);
-  assert.match(skill, /If this skill was activated with a concrete user request/);
-  assert.match(skill, /When the user explicitly activates this skill, use it even for a public page/);
-  assert.match(skill, /Do not use `browser\.tabs\.create`/);
-  assert.match(skill, /Do not use `browser\.utils\.wait`/);
-  assert.match(skill, /Do not use `bridge\.isConnected`/);
-  assert.match(skill, /Always `await agent\.browsers\.get/);
-  assert.match(skill, /browser\.documentation\(\)/);
-  assert.match(skill, /Browser Auth/);
-  assert.match(skill, /Never ask the user to paste credentials into chat/);
-  assert.match(skill, /tab\.playwright\.domSnapshot\(\)/);
-  assert.match(skill, /tab\.dom_cua\.get_visible_dom\(\)/);
-  assert.match(skill, /nodeRepl\.emitImage/);
-  assert.match(skill, /docs[\\/]+browser-api-matrix\.md/);
-  assert.doesNotMatch(skill, /const\s+fs\s*=\s*await import/);
-  assert.doesNotMatch(skill, /const\s+browser\s*=/);
-  assert.doesNotMatch(skill, /const\s+tabs\s*=/);
-  assert.doesNotMatch(skill, /const\s+tab\s*=/);
-  assert.doesNotMatch(skill, /const\s+result\s*=/);
-  assert.doesNotMatch(skill, /browser\.user\.updateTab/);
+  assert.match(skill, /Never start a\s+second IPC server/);
+  assert.match(skill, /passwords, OTPs, cookies, tokens/);
+  assert.doesNotMatch(skill, /setupNodeReplBrowserRuntime/);
   assert.doesNotMatch(skill, /D:\\\\workspace/);
-  assert.doesNotMatch(skill, /@lume\/browser-client/);
-  assert.doesNotMatch(skill, /setupBrowserRuntime\(\{ transport, context \}\)/);
+});
+
+test("native host installer keeps pairing secrets out of config files", async () => {
+  const installer = await readText(join("scripts", "install-native-host.mjs"));
+  assert.match(installer, /\["pairing","store",pairingId\]/);
+  assert.match(installer, /schemaVersion:3,endpoint,pairingId,generation,hostPath,hostSha256/);
+  assert.doesNotMatch(installer, /schemaVersion:3,endpoint,token/);
+  assert.match(installer, /createHash\("sha256"\).*hostPath/);
 });
 
 test("browser API matrix documents the public surface", async () => {
@@ -84,9 +80,9 @@ test("browser API matrix documents the public surface", async () => {
     assert.match(matrix, new RegExp(`\\| ${section} \\|`));
   }
   assert.match(matrix, /Codex-compatible public contract/);
-  assert.match(matrix, /dynamically hidden/);
-  assert.match(matrix, /lumeBrowser\.control\.openUrl/);
-  assert.match(matrix, /lumeBrowser\.control\.search/);
+  assert.match(matrix, /dynamically hide/);
+  assert.match(matrix, /legacy `lumeBrowser`/);
+  assert.match(matrix, /agent\.browsers\.get/);
   assert.match(matrix, /implemented/);
   assert.match(matrix, /intentionally unsupported/);
   assert.match(matrix, /`tab\.cua\.double_click\(\)`/);
@@ -99,17 +95,16 @@ test("browser API matrix documents the public surface", async () => {
   assert.match(matrix, /visibility/);
   assert.match(matrix, /viewport/);
   assert.match(matrix, /pageAssets/);
-  assert.match(matrix, /tab\.content\.export\(\)/);
-  assert.match(matrix, /tab\.getJsDialog\(\)/);
-  assert.match(matrix, /tab\.capabilities\.get\("cdp"\)/);
-  assert.match(matrix, /tab\.capabilities\.get\("botDetection"\)/);
-  assert.match(matrix, /downloadMedia/);
+  assert.match(matrix, /`tab\.content`.*`export\(\)`/);
+  assert.match(matrix, /`tab`.*`getJsDialog\(\)`/);
+  assert.match(matrix, /`cdp`/);
+  assert.match(matrix, /`botDetection`/);
   assert.match(matrix, /tab\.playwright/);
   assert.match(matrix, /waitForEvent/);
   assert.match(matrix, /file chooser/);
   assert.match(matrix, /download/);
-  assert.match(matrix, /Secure Browser Auth/);
   assert.match(matrix, /browserAuth/);
-  assert.match(matrix, /never returns password, OTP/);
+  assert.match(matrix, /never receives saved secrets/);
+  assert.match(matrix, /arbitrary local paths are never accepted/);
   assert.doesNotMatch(matrix, /webmcp.*implemented/i);
 });

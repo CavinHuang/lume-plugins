@@ -25,22 +25,23 @@ test("local URL classification rejects public and private-LAN targets", () => {
   ]) assert.equal(isLocalBrowserUrl(url), false, url);
 });
 
-test("default selection prefers IAB and falls back to Chrome", () => {
+test("default selection requires an IAB backend", () => {
   assert.equal(chooseDefaultBackend([chrome, iab]).id, "iab-1");
-  assert.equal(chooseDefaultBackend([chrome]).id, "chrome-1");
+  assert.throws(() => chooseDefaultBackend([chrome]), /No browser is available/);
 });
 
-test("URL selection routes local targets to IAB and public targets to Chrome", () => {
+test("URL selection stays on IAB unless external Chrome is explicit", () => {
   assert.equal(chooseBackendForUrl([chrome, iab], "http://localhost:3000/").id, "iab-1");
-  assert.equal(chooseBackendForUrl([chrome, iab], "https://example.com/").id, "chrome-1");
+  assert.equal(chooseBackendForUrl([chrome, iab], "https://example.com/").id, "iab-1");
+  assert.equal(chooseBackendForUrl([chrome, iab], "https://example.com/", "extension").id, "chrome-1");
 });
 
-test("an existing matching Chrome tab wins for public URLs", () => {
+test("an existing matching Chrome tab wins when external Chrome is explicit", () => {
   const fallback = { ...chrome, id: "chrome-fallback" };
   const withTab = { ...chrome, openTabUrls: ["https://example.com/account#profile"] };
 
   assert.equal(
-    chooseBackendForUrl([iab, fallback, withTab], "https://example.com/account").id,
+    chooseBackendForUrl([iab, fallback, withTab], "https://example.com/account", "extension").id,
     "chrome-1",
   );
 });

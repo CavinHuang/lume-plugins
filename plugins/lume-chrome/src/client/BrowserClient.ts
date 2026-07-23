@@ -9,7 +9,6 @@ import { disabledMembersFor, type ApiSupportOverrides } from "./api-contract";
 import {
   chooseBackendForUrl,
   chooseDefaultBackend,
-  isLocalBrowserUrl,
   type SelectableBackend,
 } from "./backend-selection";
 import { CapabilityCollection, createCapabilityDefinitions } from "./capabilities";
@@ -107,17 +106,9 @@ export class BrowserRegistry {
   async getForUrl(value: string): Promise<Browser> {
     const descriptors = await this.ensureDescriptors();
     const selectable = asSelectable(descriptors);
-    if (!isLocalBrowserUrl(value)) {
-      const chrome = selectable.find((item) => item.type === "extension");
-      if (chrome) {
-        const tabs = await this.transport.send<UserTabInfo[]>("browser_user_open_tabs", {
-          browserId: chrome.id,
-          context: this.context,
-        });
-        chrome.openTabUrls = tabs.flatMap((tab) => tab.url ? [tab.url] : []);
-      }
-    }
-    return this.createBrowser(chooseBackendForUrl(selectable, value));
+    // URL choice is always IAB by default. External Chrome is selected only
+    // through the explicit get("extension")/backend path.
+    return this.createBrowser(chooseBackendForUrl(selectable, value, "iab"));
   }
 
   async list(): Promise<BrowserBackendDescriptor[]> {
@@ -181,11 +172,21 @@ function normalizePingDescriptor(
   requestedId: string,
 ): BrowserBackendDescriptor {
   const type = value.type ?? value.clientType ?? requestedType(requestedId);
+  const minSupported = value.minSupported ?? value.protocolVersion ?? 0;
+  const maxSupported = value.maxSupported ?? value.protocolVersion ?? 0;
+  if (maxSupported < 5 || minSupported > 5) {
+    const error = new Error("incompatible_protocol") as Error & { code?: string };
+    error.code = "incompatible_protocol";
+    throw error;
+  }
   return {
     id: value.id ?? value.browserId ?? requestedId,
     name: value.name ?? `Lume ${type}`,
     type,
     protocolVersion: value.protocolVersion ?? 0,
+    ...(value.minSupported !== undefined ? { minSupported: value.minSupported } : {}),
+    ...(value.maxSupported !== undefined ? { maxSupported: value.maxSupported } : {}),
+    ...(value.capabilityHash ? { capabilityHash: value.capabilityHash } : {}),
     generation: value.generation ?? 0,
     metadata: value.metadata ?? {},
     capabilities: value.capabilities ?? { browser: [], tab: [] },
@@ -311,7 +312,7 @@ export class Tabs {
     private readonly ctx: BrowserContext,
     private readonly browser: BrowserBackendDescriptor,
   ) {}
-  async new(options: { url?: string; active?: boolean; grouped?: boolean } = {}): Promise<Tab> {
+  async new(options: { url?: string; active?: boolean; grouped?: boolean; sessionKind?: "advanced-cdp" } = {}): Promise<Tab> {
     const r = await this.t.send<{tabId:string}>("create_tab", { context: this.ctx, options });
     return new Tab(this.t, this.ctx, r.tabId, this.browser);
   }
@@ -562,6 +563,8 @@ export class PlaywrightLocator {
   getByTestId(testId:string): PlaywrightLocator { return this.with({kind:"testId", testId}); }
   click(options:{timeoutMs?:number;strict?:boolean}={}): Promise<void> { return this.send("playwright_locator_click", options); }
   dblclick(options:{timeoutMs?:number;strict?:boolean}={}): Promise<void> { return this.send("playwright_locator_dblclick", options); }
+  hover(options:{timeoutMs?:number;strict?:boolean}={}): Promise<void> { return this.send("playwright_locator_hover", options); }
+  scroll(deltaY:number, deltaX=0, options:{timeoutMs?:number;strict?:boolean}={}): Promise<void> { return this.send("playwright_locator_scroll", {...options, deltaX, deltaY}); }
   fill(value:string, options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_fill", {...options, text:value}); }
   press(key:string, options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_press", {...options, key}); }
   type(value:string, options:{timeoutMs?:number}={}): Promise<void> { return this.send("playwright_locator_type", {...options, text:value}); }

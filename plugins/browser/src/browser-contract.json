@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "protocolVersion": 1,
+  "minSupported": 1,
+  "maxSupported": 1,
+  "externalProtocolVersion": 5,
+  "externalMinSupported": 5,
+  "externalMaxSupported": 5,
+  "backends": ["iab", "extension"],
+  "errors": ["incompatible_protocol", "browser_unavailable", "invalid_browser_request", "invalid_url", "stale_target", "tab_not_found", "action_denied", "unsupported", "executed_unknown", "browser_internal_error"],
+  "automaticActions": ["goto", "click", "dblclick", "fill", "type", "press", "select", "check", "scroll", "drag"],
+  "alwaysConfirm": ["submitForm", "send", "delete", "purchase", "authorize", "upload", "download", "clipboard", "credentials", "captcha", "payment"]
+}

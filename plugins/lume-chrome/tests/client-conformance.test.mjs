@@ -3,6 +3,18 @@ import test from "node:test";
 import { setupBrowserRuntime } from "../dist/client/setupBrowserRuntime.js";
 import { createFakeBackend } from "./helpers/fake-browser-backend.mjs";
 
+test("URL selection defaults to IAB without inspecting external Chrome tabs", async () => {
+  const fake = createFakeBackend({ id: "lume-iab", type: "iab" });
+  fake.respond("runtime_list_browsers", [
+    fake.descriptor,
+    { ...fake.descriptor, id: "lume-extension", name: "Lume Chrome", type: "extension" },
+  ]);
+  const runtime = await setupBrowserRuntime({ globals: {}, transport: fake.transport });
+  const browser = await runtime.agent.browsers.getForUrl("https://example.com/");
+  assert.equal(browser.browserId, "lume-iab");
+  assert.equal(fake.calls.some((call) => call.method === "browser_user_open_tabs"), false);
+});
+
 test("agent discovers, selects, documents, and invalidates browsers", async () => {
   const fake = createFakeBackend({
     id: "chrome-1",
@@ -64,7 +76,7 @@ test("agent discovers, selects, documents, and invalidates browsers", async () =
 
   assert.equal(globals.agent, runtime.agent);
   assert.equal((await runtime.agent.browsers.list())[0].id, "chrome-1");
-  const browser = await runtime.agent.browsers.getForUrl("https://example.com/");
+  const browser = await runtime.agent.browsers.get("extension");
   assert.equal(browser.browserId, "chrome-1");
   assert.equal(browser.tabs.content, undefined);
   const history = await browser.user.history({

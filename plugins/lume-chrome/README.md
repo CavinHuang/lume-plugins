@@ -1,19 +1,17 @@
 # Lume Browse
 
-Lume Browse controls the user's Chrome browser from Lume through the built-in
-`node_repl` MCP tool. It is a clean-room, Lume-oriented browser runtime
+Lume Browse provides the external Chrome backend used by Lume Browser through
+the built-in `node_repl` MCP tool. It is a clean-room, Lume-oriented browser runtime
 reference derived from publicly documented behavior and static observations of
 the user-provided Codex plugin packages. It does not contain copied Codex source
 code or branding.
 
 ## Runtime flow
 
-1. The agent calls Lume's built-in `mcp__node_repl__js` tool.
-2. The `control-browser` skill imports `dist/client/setupNodeReplBrowserRuntime.js`.
-3. The node_repl runtime opens a local app-server WebSocket at
-   `ws://127.0.0.1:43127/browser`.
-4. The Chrome Native Host connects to that WebSocket and forwards JSON-RPC
-   between the extension and the browser client exposed as `agent.browsers`.
+1. Lume starts the authenticated current-user Browser Broker pipe.
+2. The Chrome Native Host loads its pairing key from the OS credential store and connects to the configured pipe endpoint.
+3. The Browser plugin calls the Broker through Lume's built-in `node_repl` tool.
+4. The Broker forwards explicit external-Chrome operations to the extension.
 
 Use this plugin when existing Chrome state matters: logged-in sessions, cookies,
 current tabs, browser profile data, or a SaaS/internal tool that cannot be
@@ -27,11 +25,14 @@ recreated in the in-app browser.
    for the current platform, verifies it, installs it in the current user's Lume
    directory, and registers it with Chrome. No Rust, npm, environment variables,
    or command line are required.
-3. Keep Chrome and Lume running. The extension popup should show that the Native
+3. Restart Lume. The installer-generated configuration contains only the random
+   current-user pipe endpoint; its random pairing key remains in Windows
+   Credential Manager or macOS Keychain.
+4. Keep Chrome and Lume running. The extension popup should show that the Native
    Host is connected to the local Lume app server.
-4. When Chrome control reaches a sensitive action such as login, clipboard,
-   download, or credential fill, confirm the Lume or Chrome authorization prompt
-   before continuing the chat turn.
+5. Lume's Broker asks for confirmation before a classified high-risk action.
+   Password filling, clipboard access, upload, and Agent downloads are not
+   exposed by the external Chrome backend.
 
 ## Activate in chat
 
@@ -39,28 +40,24 @@ From the Lume plugin detail page, use "try in chat"; it seeds the chat with
 `$lume-chrome` so the Agent loads `skills/control-browser/SKILL.md`.
 
 You can also type `$lume-chrome` manually in any Lume chat. Passwords, OTP
-codes, and login secrets must still go through the `browserAuth` prompt exposed
-by Lume's `node_repl` bridge; do not paste credentials directly into chat.
+codes, and login secrets are not available to the external Chrome backend; enter
+them manually in Chrome and do not paste credentials directly into chat.
 
 ## What it implements
 
 - MV3 Chrome extension with Native Messaging transport and reconnect status
-- Full-duplex Native Host bridge between Chrome and a Lume App Server WebSocket
+- Full-duplex Native Host bridge over a current-user named pipe / Unix socket
 - Browser Client SDK: `Browsers`, `Browser`, `BrowserUser`, `Tabs`, `Tab`
 - Dynamic browser/tab capability discovery and documentation
 - Browser session, turn, tab lease, handoff, deliverable and tab-group lifecycle
 - MV3 service-worker state persistence and tab reconciliation
-- Chrome debugger/CDP attach, screenshots, full-page clips, input, navigation history and network-idle waits
+- Chrome debugger-backed screenshots, input, navigation, and load/network-idle waits behind the Broker
 - CUA, DOM CUA, restricted Playwright-like API and serializable Locator AST
 - `getByRole`, `getByText`, `getByLabel`, `getByPlaceholder`, `getByTestId`, frame scopes, filters and positional locators
-- File chooser interception with `DOM.setFileInputFiles`
-- Download waiting/path lookup and media download helpers
-- Clipboard read/write with confirmation hooks
-- Page content export, GSuite-oriented export, page-assets inventory and download bundle
-- Chunked large-asset transfer to the Native Host
-- Site allow/session/block storage and just-in-time confirmation requests
-- Restricted CDP event streaming back to the Lume runtime
-- Secure `browserAuth` credential request/fill flow with status-only results
+- External Chrome upload and Agent download APIs fail closed as unsupported
+- Broker-owned high-risk confirmation and audit policy; the extension has no independent confirmation or site-permission store
+- Content export, page assets, clipboard, raw CDP, credential transfer, upload, and Agent downloads fail closed as unsupported
+- External Chrome credential filling is unavailable; Chrome/user autofill remains manual
 - Popup diagnostics for Native Host connection, permissions, capabilities and recent errors
 - Diagnostics, Native Host installation, protocol/version metadata and command coverage tests
 
@@ -76,22 +73,24 @@ npm run zip:extension
 Native Host release binaries are built by
 `.github/workflows/build-lume-chrome-native-host.yml`. The local
 `npm run install:native-host` script remains available only for contributors
-testing a locally compiled Host.
+testing a locally compiled Host. The installer stores the pairing key in the OS
+credential store; non-secret configuration contains only the endpoint, pairing
+ID, generation, and verified Native Host path.
 
 ## Lume skill entrypoint
 
-The plugin is consumed through `skills/control-browser/SKILL.md`. The skill must
-start from `mcp__node_repl__js`; do not assume a pre-existing `transport` or
-global browser agent.
+The plugin is consumed through `skills/control-browser/SKILL.md`. The skill uses
+the Broker bridge already exposed by `mcp__node_repl__js`; it must not start a
+second IPC server.
 
 The expected manual activation prefix is `$lume-chrome`. When activated this
 way, the Agent should continue into the requested browser task after startup
 instead of only reporting setup status.
 
-After startup, browser tasks use:
+After startup, browser tasks select the extension backend explicitly:
 
 ```js
-const browser = await agent.browsers.get("extension");
+await nodeRepl.browser.request("handshake", { __browserBackend: "extension" });
 ```
 
 ## Permissions
@@ -99,7 +98,7 @@ const browser = await agent.browsers.get("extension");
 | Permission | Purpose |
 |---|---|
 | `filesystem.read: ./**` | Read this plugin's packaged client runtime and skill files. |
-| `tools.allow: mcp__node_repl__js` | Start the local browser bridge inside Lume's built-in node_repl MCP. |
+| `tools.allow: mcp__node_repl__js` | Call Lume's authenticated Browser Broker bridge. |
 
 This plugin does not request Lume shell execution, filesystem write access, or
 Lume-declared outbound network access. The Chrome extension and Native Host still

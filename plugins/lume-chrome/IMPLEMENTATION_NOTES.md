@@ -24,7 +24,6 @@ cargo build --release
 
 ## Integration work still owned by Lume
 
-- implement the Lume App Server WebSocket endpoint
 - route Browser JSON-RPC requests from Agent Runtime to the Native Host
 - show confirmation cards and return `host.confirmation.request` results
 - integrate browser events into Lume RunState/Trace/Interruption
