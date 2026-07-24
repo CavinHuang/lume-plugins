@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Lume Browse",
   "description": "Control Chrome through Lume's browser plugin.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwSBsg4Q4ZcWPfRVvqfVu+ZuDJ9va2zyAf8+41/fQe2c3jHWLX1MFAQXrUrwdLZHpryjc5lMC/aj+CzDyUDqzDpw4qd6+HqKLzrkGN0JIA/WbYwuB9EJGdUGj/WNZi8d8ii1/V18Quax9yU1EJqWY84SvcyKgHjAtI6CYxb3su04CwT3kaJ8dZW4GWuP5zMw8RDl7S7T/8wH0IxdDxQGxdKfPfmOXL14HaGia8dRWrbeu8rSPJmLYVhJgiPGogiN0OjuIU+PGnPaeHPKmow/qpdV5tcpcxproU+GdRHQT7++RoGLA3JHJL53LbvWPt3BhyKjqNuzbGlKEgNZDQK9npwIDAQAB",
   "action": {
     "default_title": "Lume Browser",

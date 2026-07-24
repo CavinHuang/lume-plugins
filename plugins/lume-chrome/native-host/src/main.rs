@@ -4,9 +4,12 @@ use base64::{engine::general_purpose::STANDARD,Engine};
 use futures_util::{SinkExt,StreamExt};
 use serde_json::{json,Value};
 use std::{io::{stdin,stdout},sync::Arc,time::Duration};
-use tokio::sync::{mpsc,Mutex};
+use tokio::{sync::{mpsc,oneshot,Mutex},time::Instant};
 use tokio_tungstenite::tungstenite::Message;
 use protocol::{APP_SERVER_PROTOCOL_VERSION,NATIVE_HOST_PROTOCOL_VERSION};
+
+const INITIAL_APP_SERVER_WAIT:Duration=Duration::from_secs(5);
+const APP_SERVER_RETRY_DELAY:Duration=Duration::from_millis(250);
 
 #[tokio::main]
 async fn main()->Result<()> {
@@ -14,36 +17,44 @@ async fn main()->Result<()> {
     let app=app_server::AppServerClient::new(config.app_server_url.clone().unwrap_or_else(||"ws://127.0.0.1:43127/browser".into()),config.app_server_command.clone(),config.app_server_args.clone().unwrap_or_default());
     let assets=Arc::new(Mutex::new(assets::AssetStore::new(config.default_asset_root())?));
     let(native_tx,mut native_rx)=mpsc::channel::<Value>(128);let(out_tx,mut out_rx)=mpsc::channel::<Value>(128);
-    std::thread::spawn(move||{let mut input=stdin().lock();loop{match framing::read_message(&mut input){Ok(Some(bytes))=>match serde_json::from_slice::<Value>(&bytes){Ok(value)=>{if native_tx.blocking_send(value).is_err(){break;}},Err(error)=>{let _=native_tx.blocking_send(json!({"jsonrpc":"2.0","method":"host.decode_error","params":{"message":error.to_string()}}));}},Ok(None)=>break,Err(_)=>break}}});
+    let(stdin_closed_tx,mut stdin_closed_rx)=oneshot::channel::<()>();
+    std::thread::spawn(move||{let mut input=stdin().lock();loop{match framing::read_message(&mut input){Ok(Some(bytes))=>match serde_json::from_slice::<Value>(&bytes){Ok(value)=>{if native_tx.blocking_send(value).is_err(){break;}},Err(error)=>{let _=native_tx.blocking_send(json!({"jsonrpc":"2.0","method":"host.decode_error","params":{"message":error.to_string()}}));}},Ok(None)=>break,Err(_)=>break}}let _=stdin_closed_tx.send(());});
     std::thread::spawn(move||{let mut output=stdout().lock();while let Some(value)=out_rx.blocking_recv(){if let Ok(bytes)=serde_json::to_vec(&value){if framing::write_message(&mut output,&bytes).is_err(){break;}}}});
+    let connect_deadline=Instant::now()+INITIAL_APP_SERVER_WAIT;
+    let socket=loop{
+        let remaining=connect_deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero(){return Ok(())}
+        let connect=tokio::time::timeout(remaining,app.connect());
+        match tokio::select!{_=&mut stdin_closed_rx=>return Ok(()),result=connect=>result}{
+            Ok(Ok(socket))=>break socket,
+            Ok(Err(error))=>{let _=out_tx.send(status_notification("reconnecting",Some(error.to_string()))).await;},
+            Err(_)=>return Ok(())
+        }
+        let remaining=connect_deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero(){return Ok(())}
+        tokio::select!{_=&mut stdin_closed_rx=>return Ok(()),_=tokio::time::sleep(APP_SERVER_RETRY_DELAY.min(remaining))=>{}}
+    };
+    let _=out_tx.send(status_notification("connected",None)).await;
+    let(mut ws_write,mut ws_read)=socket.split();
     loop{
-        match app.connect().await{
-            Ok(socket)=>{
-                let _=out_tx.send(status_notification("connected",None)).await;
-                let(mut ws_write,mut ws_read)=socket.split();
-                loop{
-                    tokio::select!{
-                        maybe_native=native_rx.recv()=>{
-                            let Some(message)=maybe_native else{return Ok(())};
-                            if is_local_method(&message){let response=handle_local(&assets,&config,message).await;let _=out_tx.send(response).await;continue;}
-                            ws_write.send(Message::Text(serde_json::to_string(&message)?.into())).await?;
-                        }
-                        maybe_frame=ws_read.next()=>{
-                            match maybe_frame{
-                                Some(Ok(Message::Text(text)))=>{if let Ok(value)=serde_json::from_str::<Value>(&text){let _=out_tx.send(value).await;}},
-                                Some(Ok(Message::Binary(bytes)))=>{if let Ok(value)=serde_json::from_slice::<Value>(&bytes){let _=out_tx.send(value).await;}},
-                                Some(Ok(Message::Ping(data)))=>{ws_write.send(Message::Pong(data)).await?;},
-                                Some(Ok(Message::Close(_)))|None=>break,
-                                Some(Err(error))=>{let _=out_tx.send(status_notification("disconnected",Some(error.to_string()))).await;break;},
-                                _=>{}
-                            }
-                        }
-                    }
+        tokio::select!{
+            _=&mut stdin_closed_rx=>return Ok(()),
+            maybe_native=native_rx.recv()=>{
+                let Some(message)=maybe_native else{return Ok(())};
+                if is_local_method(&message){let response=handle_local(&assets,&config,message).await;let _=out_tx.send(response).await;continue;}
+                if ws_write.send(Message::Text(serde_json::to_string(&message)?.into())).await.is_err(){return Ok(())}
+            }
+            maybe_frame=ws_read.next()=>{
+                match maybe_frame{
+                    Some(Ok(Message::Text(text)))=>{if let Ok(value)=serde_json::from_str::<Value>(&text){let _=out_tx.send(value).await;}},
+                    Some(Ok(Message::Binary(bytes)))=>{if let Ok(value)=serde_json::from_slice::<Value>(&bytes){let _=out_tx.send(value).await;}},
+                    Some(Ok(Message::Ping(data)))=>{if ws_write.send(Message::Pong(data)).await.is_err(){return Ok(())}},
+                    Some(Ok(Message::Close(_)))|None=>return Ok(()),
+                    Some(Err(error))=>{let _=out_tx.send(status_notification("disconnected",Some(error.to_string()))).await;return Ok(())},
+                    _=>{}
                 }
             }
-            Err(error)=>{let _=out_tx.send(status_notification("reconnecting",Some(error.to_string()))).await;}
         }
-        tokio::time::sleep(Duration::from_secs(2)).await;
     }
 }
 fn is_local_method(message:&Value)->bool{message.get("method").and_then(Value::as_str).map(|m|matches!(m,"host.ping"|"host.hello"|"host.asset.create"|"host.asset.append"|"host.asset.finish"|"host.asset.abort"|"host.asset.remove")).unwrap_or(false)}

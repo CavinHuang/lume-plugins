@@ -37,3 +37,11 @@ test("native transport increments generation after every successful connection",
     delete globalThis.chrome;
   }
 });
+
+test("native transport reconnect delay backs off and stays capped", async () => {
+  const { nativeReconnectDelayMinutes } = await import("../dist/extension/runtime/NativeTransport.js");
+  assert.deepEqual(
+    [0, 1, 2, 3, 4, 5, 99].map(nativeReconnectDelayMinutes),
+    [0.1, 0.5, 1, 2, 5, 5, 5],
+  );
+});
