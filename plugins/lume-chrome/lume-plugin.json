@@ -1,7 +1,7 @@
 {
   "schema": "lume-plugin/v1",
   "name": "lume-chrome",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Provide an authenticated external Chrome backend for Lume Browser.",
   "author": "CavinHuang",
   "displayName": "Lume Browse",
@@ -16,7 +16,7 @@
         "title": "安装 Chrome 扩展",
         "description": "在 Chrome 扩展页加载或安装插件包内的 MV3 扩展,确保扩展处于启用状态。",
         "kind": "install",
-        "artifact": { "path": "./lume-browser-extension-v5.zip", "kind": "chrome-extension" },
+        "artifact": { "path": "./lume-browser-extension-v6.zip", "kind": "chrome-extension" },
         "targetApp": {
           "kind": "chrome",
           "installHint": "chrome://extensions → 加载已解压的扩展程序"

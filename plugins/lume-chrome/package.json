@@ -1,7 +1,7 @@
 {
   "name": "lume-chrome",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "type": "module",
   "scripts": {
     "build": "node scripts/generate-browser-contract.mjs && tsc -p tsconfig.json && node scripts/fix-esm-imports.mjs",

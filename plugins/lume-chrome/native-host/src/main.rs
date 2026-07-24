@@ -17,9 +17,13 @@ use std::{
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader},
-    sync::{mpsc, Mutex},
+    sync::{mpsc, oneshot, Mutex},
+    time::Instant,
 };
 use uuid::Uuid;
+
+const INITIAL_APP_SERVER_WAIT: Duration = Duration::from_secs(5);
+const APP_SERVER_RETRY_DELAY: Duration = Duration::from_millis(250);
 
 struct SecureChannel {
     pairing_key: Vec<u8>,
@@ -86,6 +90,7 @@ async fn main() -> Result<()> {
     let assets = Arc::new(Mutex::new(assets::AssetStore::new(config.default_asset_root())?));
     let (native_tx, mut native_rx) = mpsc::channel::<Value>(128);
     let (out_tx, mut out_rx) = mpsc::channel::<Value>(128);
+    let (stdin_closed_tx, mut stdin_closed_rx) = oneshot::channel::<()>();
 
     std::thread::spawn(move || {
         let mut input = stdin().lock();
@@ -98,6 +103,7 @@ async fn main() -> Result<()> {
                 Ok(None) | Err(_) => break,
             }
         }
+        let _ = stdin_closed_tx.send(());
     });
     std::thread::spawn(move || {
         let mut output = stdout().lock();
@@ -108,61 +114,75 @@ async fn main() -> Result<()> {
         }
     });
 
+    let connect_deadline = Instant::now() + INITIAL_APP_SERVER_WAIT;
+    let socket = loop {
+        let remaining = connect_deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() { return Ok(()); }
+        let connect = tokio::time::timeout(remaining, app.connect());
+        match tokio::select! {
+            _ = &mut stdin_closed_rx => return Ok(()),
+            result = connect => result,
+        } {
+            Ok(Ok(socket)) => break socket,
+            Ok(Err(error)) => { let _ = out_tx.send(status_notification("reconnecting", Some(error.to_string()))).await; }
+            Err(_) => return Ok(()),
+        }
+        let remaining = connect_deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() { return Ok(()); }
+        tokio::select! {
+            _ = &mut stdin_closed_rx => return Ok(()),
+            _ = tokio::time::sleep(APP_SERVER_RETRY_DELAY.min(remaining)) => {}
+        }
+    };
+    let _ = out_tx.send(status_notification("connected", None)).await;
+    let mut secure = SecureChannel {
+        pairing_key,
+        pairing_id,
+        generation,
+        transcript: None,
+        nonce_main: None,
+        nonce_host: None,
+        session_key: None,
+        send_sequence: 0,
+        receive_sequence: 0,
+    };
+    let (read, mut write) = tokio::io::split(socket);
+    let mut lines = BufReader::new(read).lines();
     loop {
-        match app.connect().await {
-            Ok(socket) => {
-                let mut secure = SecureChannel {
-                    pairing_key: pairing_key.clone(),
-                    pairing_id: pairing_id.clone(),
-                    generation,
-                    transcript: None,
-                    nonce_main: None,
-                    nonce_host: None,
-                    session_key: None,
-                    send_sequence: 0,
-                    receive_sequence: 0,
-                };
-                let (read, mut write) = tokio::io::split(socket);
-                let mut lines = BufReader::new(read).lines();
-                loop {
-                    tokio::select! {
-                        maybe_native = native_rx.recv() => {
-                            let Some(message) = maybe_native else { return Ok(()); };
-                            if is_local_method(&message) {
-                                let response = handle_local(&assets, &config, message).await;
-                                let _ = out_tx.send(response).await;
-                                continue;
-                            }
-                            if secure.authenticated() {
-                                let envelope = secure.encode(&message)?;
-                                write_json_line(&mut write, &envelope).await?;
-                            }
+        tokio::select! {
+            _ = &mut stdin_closed_rx => return Ok(()),
+            maybe_native = native_rx.recv() => {
+                let Some(message) = maybe_native else { return Ok(()); };
+                if is_local_method(&message) {
+                    let response = handle_local(&assets, &config, message).await;
+                    let _ = out_tx.send(response).await;
+                    continue;
+                }
+                if secure.authenticated() {
+                    let envelope = secure.encode(&message)?;
+                    write_json_line(&mut write, &envelope).await?;
+                }
+            }
+            maybe_line = lines.next_line() => {
+                match maybe_line {
+                    Ok(Some(line)) => {
+                        if line.len() > 2 * 1024 * 1024 { return Ok(()); }
+                        let value: Value = match serde_json::from_str(&line) { Ok(value) => value, Err(_) => return Ok(()) };
+                        if !secure.authenticated() {
+                            handle_app_handshake(&mut write, &mut secure, &value).await?;
+                        } else {
+                            let payload = secure.decode(&value)?;
+                            let _ = out_tx.send(payload).await;
                         }
-                        maybe_line = lines.next_line() => {
-                            match maybe_line {
-                                Ok(Some(line)) => {
-                                    if line.len() > 2 * 1024 * 1024 { break; }
-                                    let value: Value = match serde_json::from_str(&line) { Ok(value) => value, Err(_) => break };
-                                    if !secure.authenticated() {
-                                        handle_app_handshake(&mut write, &mut secure, &value).await?;
-                                    } else {
-                                        let payload = secure.decode(&value)?;
-                                        let _ = out_tx.send(payload).await;
-                                    }
-                                }
-                                Ok(None) => break,
-                                Err(error) => {
-                                    let _ = out_tx.send(status_notification("disconnected", Some(error.to_string()))).await;
-                                    break;
-                                }
-                            }
-                        }
+                    }
+                    Ok(None) => return Ok(()),
+                    Err(error) => {
+                        let _ = out_tx.send(status_notification("disconnected", Some(error.to_string()))).await;
+                        return Ok(());
                     }
                 }
             }
-            Err(error) => { let _ = out_tx.send(status_notification("reconnecting", Some(error.to_string()))).await; }
         }
-        tokio::time::sleep(Duration::from_secs(2)).await;
     }
 }
 

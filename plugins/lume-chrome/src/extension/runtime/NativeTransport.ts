@@ -3,6 +3,9 @@ import type { RpcRequest, RpcResponse } from "../../shared/protocol";
 
 export type NativeStatus = "connected" | "disconnected" | "reconnecting";
 type Pending = { resolve:(value:unknown)=>void; reject:(error:Error)=>void; timer:number };
+const RECONNECT_DELAYS_MINUTES=[0.1,0.5,1,2,5] as const;
+
+export function nativeReconnectDelayMinutes(attempt:number){return RECONNECT_DELAYS_MINUTES[Math.min(Math.max(0,attempt),RECONNECT_DELAYS_MINUTES.length-1)];}
 
 export class NativeTransport {
   private port: chrome.runtime.Port | null = null;
@@ -11,8 +14,9 @@ export class NativeTransport {
   private pending = new Map<string, Pending>();
   private seq = 1;
   private generation = 0;
+  private reconnectAttempt = 0;
   constructor(private readonly onMessage: (message: RpcRequest) => Promise<RpcResponse>) {}
-  getStatus() { return { status: this.status, host: NATIVE_HOST_NAME, connected: this.port !== null, updatedAt: Date.now() }; }
+  getStatus() { return { status: this.status, host: NATIVE_HOST_NAME, connected: this.port !== null && this.status === "connected", updatedAt: Date.now() }; }
   connectionGeneration() { return this.generation; }
   start() {
     chrome.alarms.onAlarm.addListener((a:any) => { if (a.name === this.reconnectAlarm && !this.port) this.connect(); });
@@ -23,15 +27,18 @@ export class NativeTransport {
     try {
       this.port = chrome.runtime.connectNative(NATIVE_HOST_NAME);
       this.generation += 1;
-      this.status = "connected";
+      this.status = "reconnecting";
       void chrome.storage.local.set({ NATIVE_HOST_STATUS: this.getStatus() });
       this.port.onMessage.addListener((message:any) => void this.handleIncoming(message));
       this.port.onDisconnect.addListener(() => this.handleDisconnect());
-      void this.requestHost("host.hello", { extensionId: chrome.runtime.id, extensionVersion: chrome.runtime.getManifest().version }, 5_000).catch(()=>undefined);
+      void this.requestHost("host.hello", { extensionId: chrome.runtime.id, extensionVersion: chrome.runtime.getManifest().version }, 8_000).then(()=>{
+        this.reconnectAttempt=0;this.status="connected";
+        void chrome.storage.local.set({ NATIVE_HOST_STATUS: this.getStatus() });
+      }).catch(()=>undefined);
     } catch (error) {
       this.status = "disconnected";
       void chrome.storage.local.set({ NATIVE_HOST_STATUS: { ...this.getStatus(), lastError: String(error) } });
-      chrome.alarms.create(this.reconnectAlarm, { delayInMinutes: 0.08 });
+      this.scheduleReconnect();
     }
   }
   async requestHost<T=unknown>(method:string, params:unknown, timeoutMs=30_000):Promise<T>{
@@ -64,6 +71,7 @@ export class NativeTransport {
     for(const [id,p] of this.pending){clearTimeout(p.timer);p.reject(new Error(`Native host disconnected during request ${id}`));}
     this.pending.clear();
     void chrome.storage.local.set({NATIVE_HOST_STATUS:{...this.getStatus(),lastError}});
-    chrome.alarms.create(this.reconnectAlarm,{delayInMinutes:0.08});
+    this.scheduleReconnect();
   }
+  private scheduleReconnect(){const delayInMinutes=nativeReconnectDelayMinutes(this.reconnectAttempt++);chrome.alarms.create(this.reconnectAlarm,{delayInMinutes});}
 }
