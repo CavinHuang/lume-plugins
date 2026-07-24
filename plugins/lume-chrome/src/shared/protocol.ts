@@ -1,8 +1,11 @@
 import type { LocatorAst } from "./locator";
+import { BROWSER_CONTRACT } from "./browser-contract.generated";
 
-export const PROTOCOL_VERSION = 5;
-export const NATIVE_HOST_PROTOCOL_VERSION = 4;
-export const APP_SERVER_PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = BROWSER_CONTRACT.externalProtocolVersion;
+export const PROTOCOL_MIN_SUPPORTED = BROWSER_CONTRACT.externalMinSupported;
+export const PROTOCOL_MAX_SUPPORTED = BROWSER_CONTRACT.externalMaxSupported;
+export const NATIVE_HOST_PROTOCOL_VERSION = 5;
+export const APP_SERVER_PROTOCOL_VERSION = 2;
 export const NATIVE_HOST_NAME = "com.lume.browser";
 
 export type BrowserClientType = "extension" | "iab" | "cdp";
@@ -31,7 +34,7 @@ export type BrowserCommandType =
   | "playwright_dom_snapshot" | "playwright_evaluate" | "playwright_element_info" | "playwright_element_screenshot"
   | "playwright_download_path" | "playwright_wait_for_download" | "playwright_wait_for_file_chooser" | "playwright_file_chooser_set_files"
   | "playwright_wait_for_load_state" | "playwright_wait_for_timeout" | "playwright_wait_for_url" | "playwright_wait_for_selector"
-  | "playwright_locator_click" | "playwright_locator_dblclick" | "playwright_locator_fill" | "playwright_locator_press" | "playwright_locator_type"
+  | "playwright_locator_click" | "playwright_locator_dblclick" | "playwright_locator_hover" | "playwright_locator_scroll" | "playwright_locator_fill" | "playwright_locator_press" | "playwright_locator_type"
   | "playwright_locator_select_option" | "playwright_locator_set_checked" | "playwright_locator_check" | "playwright_locator_uncheck"
   | "playwright_locator_get_attribute" | "playwright_locator_inner_text" | "playwright_locator_text_content" | "playwright_locator_input_value"
   | "playwright_locator_is_visible" | "playwright_locator_is_enabled" | "playwright_locator_is_checked" | "playwright_locator_count"
@@ -62,6 +65,9 @@ export interface BrowserBackendDescriptor {
   name: string;
   type: BrowserClientType;
   protocolVersion: number;
+  minSupported?: number;
+  maxSupported?: number;
+  capabilityHash?: string;
   generation: number;
   metadata: Record<string, string>;
   capabilities: {

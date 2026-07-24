@@ -1,0 +1,18 @@
+{
+  "schema": "lume-plugin/v1",
+  "name": "browser",
+  "version": "1.0.0",
+  "description": "Lume 自有内置浏览器 Agent 能力插件。",
+  "author": "Lume Team",
+  "displayName": "Lume Browser",
+  "category": "Browser",
+  "skills": ["./skills/"],
+  "client": "./dist/browser-client.js",
+  "contract": "./src/browser-contract.json",
+  "permissions": {
+    "filesystem": { "read": ["./**"] },
+    "tools": { "allow": ["mcp__node_repl__js"] },
+    "network": { "outbound": [] },
+    "shell": { "allow": false }
+  }
+}

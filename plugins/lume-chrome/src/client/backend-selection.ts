@@ -1,4 +1,4 @@
-import type { BrowserBackendDescriptor } from "../shared/protocol";
+import type { BrowserBackendDescriptor, BrowserClientType } from "../shared/protocol";
 
 export interface SelectableBackend extends BrowserBackendDescriptor {
   openTabUrls: string[];
@@ -23,9 +23,7 @@ export function isLocalBrowserUrl(value: string): boolean {
 }
 
 export function chooseDefaultBackend(backends: SelectableBackend[]): SelectableBackend {
-  const selected = backends.find((backend) => backend.type === "iab")
-    ?? backends.find((backend) => backend.type === "extension")
-    ?? backends[0];
+  const selected = backends.find((backend) => backend.type === "iab");
   if (!selected) throw new Error("No browser is available");
   return selected;
 }
@@ -40,12 +38,12 @@ function comparableUrl(value: string): URL | null {
   }
 }
 
-export function chooseBackendForUrl(backends: SelectableBackend[], value: string): SelectableBackend {
+export function chooseBackendForUrl(backends: SelectableBackend[], value: string, preferredType?: BrowserClientType): SelectableBackend {
   const target = comparableUrl(value);
   if (!target) throw new Error(`Invalid browser URL: ${value}`);
 
-  const preferredType = isLocalBrowserUrl(target.href) ? "iab" : "extension";
-  const candidates = backends.filter((backend) => backend.type === preferredType);
+  const selectedType = preferredType ?? "iab";
+  const candidates = backends.filter((backend) => backend.type === selectedType);
   const matching = candidates.find((backend) => backend.openTabUrls.some((candidate) => {
     const open = comparableUrl(candidate);
     return open?.href === target.href
@@ -53,6 +51,6 @@ export function chooseBackendForUrl(backends: SelectableBackend[], value: string
       || open?.hostname === target.hostname;
   }));
   const selected = matching ?? candidates[0];
-  if (!selected) throw new Error(`No ${preferredType} browser is available for ${target.href}`);
+  if (!selected) throw new Error(`No ${selectedType} browser is available for ${target.href}`);
   return selected;
 }

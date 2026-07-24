@@ -2,7 +2,7 @@
   "schema": "lume-plugin/v1",
   "name": "lume-chrome",
   "version": "0.5.1",
-  "description": "Control Chrome through Lume's built-in node_repl MCP bridge.",
+  "description": "Provide an authenticated external Chrome backend for Lume Browser.",
   "author": "CavinHuang",
   "displayName": "Lume Browse",
   "category": "Browser",
@@ -29,7 +29,7 @@
       {
         "id": "install-native-host",
         "title": "安装 Native Host",
-        "description": "点击安装后,Lume 会选择当前平台的预编译 Native Host,完成校验、写入和 Chrome Native Messaging 注册。无需 Rust、npm 或命令行。",
+        "description": "点击安装后,Lume 会选择当前平台的预编译 Native Host，完成校验、注册并将当前用户配对密钥写入系统凭证库。无需 Rust、npm 或命令行。",
         "kind": "install",
         "artifacts": [
           { "path": "./runtime/win32-x64/lume-chrome-host.exe", "kind": "native-binary", "platform": "win32", "arch": "x64" },
@@ -51,13 +51,13 @@
       {
         "id": "keep-chrome-ready",
         "title": "保持 Chrome 与 Lume 运行",
-        "description": "打开 Chrome,确认扩展弹窗显示 Native Host 已连接,同时保持 Lume 的 node_repl 桥接可用。",
+        "description": "安装后重启 Lume，再打开 Chrome；Lume 会读取当前用户的 bridge 配置，扩展弹窗应显示 Native Host 已连接。",
         "kind": "local-service"
       },
       {
         "id": "confirm-browser-auth",
         "title": "确认浏览器授权",
-        "description": "从插件详情页试用会以 $lume-chrome 激活技能;遇到登录、OTP、剪贴板、下载等敏感动作时,在 Lume browserAuth 或 Chrome 授权弹窗中确认后再继续对话。",
+        "description": "从插件详情页试用会以 $lume-chrome 激活技能；受控高风险操作由 Lume Broker 确认，密码、剪贴板、上传和 Agent 下载不向外部 Chrome 后端开放。",
         "kind": "browser-auth"
       }
     ]

@@ -1,50 +1,38 @@
 # Lume Browser API Matrix
 
 This is the Codex-compatible public contract exposed to Lume agents through
-`lume-chrome` and `node_repl`. The method names below match
-`src/client/BrowserClient.ts`; unsupported members are dynamically hidden by the
-selected backend descriptor rather than exposed as callable placeholders.
+the canonical `agent.browsers` runtime. Method names come from
+`src/client/BrowserClient.ts`; backend descriptors dynamically hide unavailable
+capabilities instead of presenting them as working features.
 
 ## Capability Summary
 
 | Category | Status | Public API | Notes |
 | --- | --- | --- | --- |
 | browser | implemented | `agent.browsers.*`, `browser.*` | Always await `agent.browsers.get(...)`. |
-| session | implemented | `lumeBrowser.context`, `lumeBrowser.bridge.url`, `lumeBrowser.control.getStatus()` | Stable runtime globals are listed below. |
+| session | implemented | Broker-issued context and generation | Callers cannot override trusted identity fields. |
 | tab | implemented | `browser.tabs.*`, `browser.user.*`, `tab.*` | Use `browser.tabs.new()`, not `browser.tabs.create`. |
-| navigation | implemented | `tab.goto()`, `tab.back()`, `tab.forward()`, `tab.reload()`, `lumeBrowser.control.openUrl()` | Prefer the facade for simple page opens. |
+| navigation | implemented | `tab.goto()`, `tab.back()`, `tab.forward()`, `tab.reload()` | IAB is the default backend; request `extension` explicitly for Chrome. |
 | locator | implemented | `tab.playwright` locator builders and locator operations | Preferred for stable element interaction. |
-| playwright | implemented | snapshots, evaluation, navigation waits, event waits | There is no `browser.utils.wait`. |
+| playwright | implemented | snapshots, navigation waits, event waits | There is no generic JavaScript `evaluate` or `browser.utils.wait`. |
 | cua | implemented | `tab.dom_cua.*`, `tab.cua.*` | Prefer DOM CUA over coordinates. |
-| screenshot | implemented | `tab.screenshot()` | Returns `Uint8Array`; emit as a data URL with `nodeRepl.emitImage`. |
-| finalize | implemented | `browser.tabs.finalize()`, `release()`, `handoff()`, `lumeBrowser.control.finalizeTabs()` | Finalize every browser turn. |
-| diagnostics | implemented | `agent.browsers.diagnostics()`, `lumeBrowser.control.getStatus()` | The facade fails fast when no native host is connected. |
-| search | implemented | `lumeBrowser.control.search({ engine, query })` | Supports `baidu`, `bing`, and `google`. |
+| screenshot | implemented | `tab.screenshot()` | Returns `Uint8Array`. |
+| finalize | implemented | `browser.tabs.finalize()`, `release()`, `handoff()` | Finalize every browser turn. |
+| diagnostics | implemented | `agent.browsers.diagnostics()` | Reports registered backends and connection state. |
+| guarded files | IAB only | guarded upload and task download APIs | External Chrome does not advertise Agent upload/download. |
+| saved credentials | IAB only | Broker-controlled `browserAuth` | External Chrome never receives saved secrets. |
 | raw protocol | reference-only | `BrowserCommandType` in `src/shared/protocol.ts` | Do not send raw commands when a client method exists. |
-| direct bridge state | intentionally unsupported | `bridge.isConnected`, `bridge.reconnect` | Use `lumeBrowser.control.getStatus()`. |
-| invented tab helpers | intentionally unsupported | `browser.tabs.create`, `browser.tabs.open`, `browser.user.open`, `agent.navigate` | These APIs do not exist. |
-| generic wait helpers | intentionally unsupported | `browser.utils.wait`, global `wait(ms)` | Use targeted Playwright waits. |
+| invented helpers | intentionally unsupported | `lumeBrowser.control.*`, `browser.tabs.create`, `browser.tabs.open`, `agent.navigate` | These APIs do not exist. |
 
-## Stable Runtime Globals
+## Stable Runtime Global
 
 | Global | Status | Purpose |
 | --- | --- | --- |
-| `agent` | implemented | Entry point for low-level browser APIs. |
-| `lumeBrowser` | implemented | Runtime object with `agent`, `bridge`, `context`, and `control`. |
-| `lumeBrowserAgent` | implemented | Alias for `lumeBrowser.agent`. |
-| `lumeBrowserBridge` | implemented | Alias for `lumeBrowser.bridge`; public uses are `url` and `close()`. |
-| `lumeBrowserControl` | implemented | Alias for `lumeBrowser.control`. |
+| `agent` | implemented | Entry point containing `browsers` and runtime documentation. |
 
-## High-Level Facade
-
-| API | Status | Purpose |
-| --- | --- | --- |
-| `lumeBrowser.control.openUrl(url, options?)` | implemented | Open one tab and wait for its load state. |
-| `lumeBrowser.control.search(query, options?)` | implemented | Search with the default or selected engine. |
-| `lumeBrowser.control.search({ engine, query, ...options })` | implemented | Object form of search. |
-| `lumeBrowser.control.listTabs()` | implemented | List user-visible Chrome tabs. |
-| `lumeBrowser.control.getStatus()` | implemented | Diagnose bridge/native-host connectivity without throwing. |
-| `lumeBrowser.control.finalizeTabs(options?)` | implemented | Finalize the turn and optionally retain selected tab IDs. |
+The legacy `lumeBrowser`, `lumeBrowserControl`, `lumeBrowserAgent`, and
+`lumeBrowserBridge` globals were removed. Browser commands must pass through the
+Broker-backed `agent.browsers` transport.
 
 ## Browser And Session
 
@@ -64,58 +52,29 @@ selected backend descriptor rather than exposed as callable placeholders.
 | --- | --- |
 | `browser.tabs` | `new()`, `get()`, `selected()`, `list()`, `sessionTabs()`, `finalize()`, `release()`, `handoff()`, `resumeHandoff()` |
 | `tab` | `close()`, `title()`, `url()`, `goto()`, `back()`, `forward()`, `reload()`, `screenshot()`, `getJsDialog()`, `markDeliverable()`, `markHandoff()`, `exportContent()` |
-| `tab.content` | `export()`, `exportGsuite(type)` |
+| `tab.content` | `export()`, `exportGsuite(type)` when the descriptor advertises support |
 | `tab.capabilities` | `list()`, `get()` |
-| `tab.capabilities.pageAssets` | `list()`, `bundle()`, `documentation()` |
-| `tab.clipboard` | `read()`, `readText()`, `write()`, `writeText()` |
-| `tab.dev` | `cdpCall()`, `subscribe()`, `logs()` |
-
-Canonical `tab.content.export()`, `tab.content.exportGsuite(type)`,
-`tab.getJsDialog()`, `tab.markDeliverable()`, and `tab.markHandoff()` are
-implemented by the extension backend. `browser.tabs.content()` remains hidden
-because temporary background extraction is not implemented.
-
-## Implemented Optional Capabilities
-
-| Capability | Scope | Public API |
-| --- | --- | --- |
-| `visibility` | browser | `await browser.capabilities.get("visibility")` |
-| `viewport` | browser | `await browser.capabilities.get("viewport")` |
-| `pageAssets` | tab | `await tab.capabilities.get("pageAssets")` |
-| `cdp` | tab | `await tab.capabilities.get("cdp")` |
-| `botDetection` | tab | `await tab.capabilities.get("botDetection")` |
-| `browserAuth` | tab | `await tab.capabilities.get("browserAuth")` |
-
-A capability can be obtained only when the backend advertises it and the client
-has a callable definition for it.
+| `tab.clipboard` | `read()`, `readText()`, `write()`, `writeText()` when advertised and confirmed |
+| `tab.dev` | allowlisted CDP calls for an enabled isolated IAB developer session |
+| `tab.capabilities` | Descriptor-gated `pageAssets`, `cdp`, `botDetection`, and backend-specific capabilities |
 
 ## Playwright And Locators
 
 Canonical method names include `locator.readAll()` and all methods in the table.
+The backend descriptor is authoritative: a member listed in the shared client is
+not evidence that a particular backend supports it.
 
 | Object | Implemented methods |
 | --- | --- |
-| `tab.playwright` | `domSnapshot()`, `evaluate()`, `elementInfo()`, `elementScreenshot()`, `expectNavigation()`, `frameLocator()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()`, `waitForURL()`, `waitForLoadState()`, `waitForTimeout()`, `waitForEvent()` |
+| `tab.playwright` | `domSnapshot()`, `elementInfo()`, `elementScreenshot()`, `expectNavigation()`, `frameLocator()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()`, `waitForURL()`, `waitForLoadState()`, `waitForTimeout()`, `waitForEvent()` |
 | `locator` composition | `first()`, `last()`, `nth()`, `filter()`, `and()`, `or()`, `locator()`, `getByRole()`, `getByText()`, `getByLabel()`, `getByPlaceholder()`, `getByTestId()` |
-| `locator` actions | `click()`, `dblclick()`, `fill()`, `press()`, `type()`, `selectOption()`, `setChecked()`, `check()`, `uncheck()`, `waitFor()`, `downloadMedia()` |
+| `locator` actions | `click()`, `dblclick()`, `fill()`, `press()`, `type()`, `selectOption()`, `setChecked()`, `check()`, `uncheck()`, `waitFor()` |
 | `locator` readers | `getAttribute()`, `innerText()`, `textContent()`, `inputValue()`, `isVisible()`, `isEnabled()`, `isChecked()`, `count()`, `allTextContents()`, `readAll()`, `all()` |
-| `fileChooser` | `isMultiple()`, `accept()`, `setFiles()` |
-| `download` | `suggestedFilename()`, `path()` |
 
-Use `tab.playwright.waitForEvent("filechooser")` before file chooser upload
-flows.
-
-## Secure Browser Auth
-
-| Capability | Status | Public API |
-| --- | --- | --- |
-| `browserAuth` | implemented | `await tab.capabilities.get("browserAuth").request(options)` |
-
-`browserAuth.request({ origin, reason, expires_at, fields, submit? })` returns
-only `{ status }`. It never returns password, OTP, cookies, screenshots, DOM
-snippets, full URLs, or query strings to the agent. If `browserAuth` is
-`unavailable`, do not ask the user to paste secrets into chat; stop and report
-that secure browser credential entry is unavailable.
+External Chrome intentionally returns `E_UNSUPPORTED` for file chooser, Agent
+download, download-path, and saved-credential commands and does not advertise
+those capabilities. IAB file operations use opaque task-bound file references;
+arbitrary local paths are never accepted from Agent input.
 
 ## CUA
 
@@ -124,17 +83,16 @@ Canonical method names include `tab.dom_cua.get_visible_dom()` and
 
 | Object | Implemented methods |
 | --- | --- |
-| `tab.dom_cua` | `get_visible_dom()`, `click()`, `double_click()`, `type()`, `keypress()`, `scroll()`, `downloadMedia()` |
-| `tab.cua` | `click()`, `double_click()`, `move()`, `drag()`, `scroll()`, `type()`, `keypress()`, `downloadMedia()` |
+| `tab.dom_cua` | `get_visible_dom()`, `click()`, `double_click()`, `type()`, `keypress()`, `scroll()` |
+| `tab.cua` | `click()`, `double_click()`, `move()`, `drag()`, `scroll()`, `type()`, `keypress()` |
 
 Clipboard methods use the canonical names `tab.clipboard.read()`,
 `tab.clipboard.readText()`, `tab.clipboard.write()`, and
 `tab.clipboard.writeText()`.
 
-Prefer the high-level facade for ordinary user tasks:
-
 ```js
-var result = await lumeBrowser.control.search({ engine: "baidu", query: "glm" });
-await lumeBrowser.control.finalizeTabs({ keepTabIds: [result.tabId] });
-nodeRepl.write(JSON.stringify(result));
+const browser = await agent.browsers.get("iab");
+const tab = await browser.tabs.new();
+await tab.goto("https://example.com");
+await browser.tabs.finalize({ keepTabIds: [tab.id] });
 ```

@@ -90,13 +90,17 @@ async function locatorOperation(tabId, ast, operation, payload = {}) {
         if (strict && current.length !== 1)
             throw new Error(`Strict locator violation: resolved to ${current.length} elements`);
         const el = current[0];
-        if (["click", "dblclick", "fill", "press", "type", "selectOption", "setChecked", "check", "uncheck"].includes(op)) {
+        if (["actionPoint", "click", "dblclick", "hover", "scroll", "fill", "press", "type", "selectOption", "setChecked", "check", "uncheck"].includes(op)) {
             if (!visible(el))
                 throw new Error("Element is not visible");
             if (!enabled(el))
                 throw new Error("Element is disabled");
             el.scrollIntoView({ block: "center", inline: "center" });
             await new Promise(r => requestAnimationFrame(() => r(undefined)));
+        }
+        if (op === "actionPoint") {
+            const r = el.getBoundingClientRect();
+            return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
         }
         if (op === "click") {
             el.click();

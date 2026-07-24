@@ -26,25 +26,13 @@
     "scripting",
     "storage",
     "tabGroups",
-    "tabs",
-    "downloads",
-    "downloads.ui",
-    "favicon",
-    "sessions",
-    "clipboardRead",
-    "clipboardWrite"
-  ],
-  "optional_permissions": [
-    "history",
-    "bookmarks",
-    "readingList",
-    "topSites"
+    "tabs"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*;"
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'self';"
   },
   "web_accessible_resources": [
     {
